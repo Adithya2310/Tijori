@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { ArrowDownLeft, ArrowRight, ArrowUpRight, AudioLines, Check, CheckCircle2, ChevronDown, CircleHelp, Fingerprint, Globe2, LockKeyhole, Plus, Radio, ScanLine, ShieldCheck, Sparkles, Users, Wallet, X } from 'lucide-react';
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, AudioLines, Check, CheckCircle2, ChevronDown, CircleHelp, Fingerprint, LockKeyhole, Plus, Radio, ScanLine, ShieldCheck, Users, X } from 'lucide-react';
 
 type WalletType={id:string;name:string;object_name:string};
 type Group={id:string;name:string;frequency:number;members:WalletType[]};
@@ -13,7 +13,7 @@ const threshold=(n:number)=>Math.floor(n/2)+1;
 export default function Home(){
  const [data,setData]=useState<Data>(empty),[active,setActive]=useState(''),[tab,setTab]=useState('Overview'),[modal,setModal]=useState<Modal>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  const [name,setName]=useState(''),[objectName,setObjectName]=useState(''),[members,setMembers]=useState<string[]>([]),[groupId,setGroupId]=useState(''),[recipient,setRecipient]=useState(''),[amount,setAmount]=useState(''),[asset,setAsset]=useState('ETH'),[note,setNote]=useState(''),[selected,setSelected]=useState<Tx|null>(null),[dial,setDial]=useState(18000),[matched,setMatched]=useState(false);
- useEffect(()=>{fetch('/api/state').then(r=>r.json()).then(setData).catch(()=>setError('Could not load the vault.')); const saved=localStorage.getItem('pv-wallet'); if(saved)setActive(saved)},[]);
+ useEffect(()=>{fetch('/api/state').then(r=>r.json()).then(result=>{setData(result); const saved=localStorage.getItem('pv-wallet'); if(saved)setActive(saved)}).catch(()=>setError('Could not load the vault.'))},[]);
  const wallet=data.wallets.find(w=>w.id===active), groups=data.groups.filter(g=>g.members.some(m=>m.id===active)), pending=data.transactions.filter(t=>groups.some(g=>g.id===t.group_id)&&t.status==='pending'), currentGroup=groups.find(g=>g.id===groupId);
  const close=()=>{setModal(null);setError('');setMatched(false)};
  function open(m:Modal){setError('');setNotice('');setName('');setObjectName('');setMembers(active?[active]:[]);setGroupId(groups[0]?.id||'');setRecipient('');setAmount('');setNote('');setMatched(false);setModal(m)}

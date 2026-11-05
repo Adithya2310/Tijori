@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const root = join(process.cwd(), 'data');
+const root = process.env.VAULT_DATA_DIR || join(process.cwd(), 'data');
 mkdirSync(root, { recursive: true });
 const db = new DatabaseSync(join(root, 'vault.sqlite'));
 db.exec(`PRAGMA foreign_keys = ON;
