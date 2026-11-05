@@ -7,13 +7,13 @@ Privacy Vault is a local Next.js prototype for object-based identities and group
 Use Node.js 22.20 or later (the app uses `node:sqlite`), then `npm install` and `npm run dev`. Open http://localhost:3000. SQLite is created automatically at `data/vault.sqlite`; it is local, ignored by Git, and can be deleted to reset the demo. The SQLite API is experimental in Node 22. The server needs a writable persistent filesystem; this setup is not suitable for stateless/serverless deployment.
 
 ## Structure and contracts
-- `app/page.tsx`: client dashboard, identity switching, forms, simulated receive dial and approval flow.
+- `app/page.tsx`: client sign-up/login, dashboard, forms, simulated group listening and approval flow.
 - `app/globals.css`: shared visual system and responsive layouts.
-- `app/api/[...path]/route.ts`: mock HTTP API and validation. `GET /api/state` returns `{ wallets, groups, transactions }`. POST actions are `wallets`, `groups`, `transactions`, and `approve`; successful writes return the same state. Errors return `{ error }` with status 400.
+- `app/api/[...path]/route.ts`: mock HTTP API and validation. `GET /api/state` returns `{ wallets, groups, transactions }`. POST actions are `signup`, `login`, `groups`, `transactions`, and `approve`; successful writes return the same state. Errors return `{ error }` with status 400.
 - `lib/db.ts`: SQLite schema and connection. Keep relational integrity and persist changes through the API.
 - `data/`: generated local state, never commit it.
 
-A group has a generated frequency and at least two existing identities. The sender's approval is recorded when creating a transaction. A strict majority (`floor(memberCount / 2) + 1`) completes a simulated transaction. Each member can approve once. The receive dial only simulates matching: the server does not authenticate a listener or enforce physical proximity. Switching identities is a local demo control, not authentication. IDs and recipient strings are placeholders, not World IDs or wallet addresses.
+A group has a unique generated mock signal code and at least two members. Entering a World ID creates a placeholder member if needed; a later sign-up claims it. Codes are stored server-side and omitted from state responses. The sender's approval is recorded when creating a transaction. A strict majority (`floor(memberCount / 2) + 1`) completes a simulated transaction. Each member can approve once. Receiving only simulates matching: the server does not authenticate a listener or enforce physical proximity. Sign-up and login match a stored object description and World ID string; they are not real authentication, object recognition, or World ID verification. Log out and log in as another demo member to test approvals. IDs and recipient strings are placeholders, not verified World IDs or wallet addresses. Balances are zero placeholders and are not updated by transactions.
 
 ## Suggested independent workstreams
 1. **Identity and object verification:** replace mock identity creation/sign-in with a reviewed object-verification and key-management design. VILA is a research reference (https://github.com/marcociama/VILA), not an integrated dependency. Its README describes DINOv2 features and encrypted vault/key derivation; object recognition alone is not a private key or proof of secure recovery. Define enrollment, authentication, recovery, threat model and consent before connecting it.
@@ -31,3 +31,5 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+Run `npm run build` before `npm test`; the integration test uses an isolated SQLite directory and production server. Existing databases receive a `world_id` column and legacy identifiers automatically; duplicate legacy group codes are repaired.
