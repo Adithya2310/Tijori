@@ -1,0 +1,30 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { emptyVault, applyAction, publicState, validateVault } from '../lib/vault.ts';
+import { encryptState, decryptState } from '../lib/arkiv/codec.ts';
+test('encrypted state uses fresh IVs, binds context, rejects tampering/wrong keys and oversized state', () => {
+ const vault = emptyVault(), key = randomBytes(32), context = 'testnet:owner:namespace:1';
+ applyAction(vault, 'signup', { name: 'Alice', worldId: 'ALICE', objectName: 'Blue mug' });
+ const a = encryptState(vault, key, context), b = encryptState(vault, key, context);
+ assert.notDeepEqual(a, b); assert.deepEqual(decryptState(a, key, context), vault);
+ assert.ok(!a.includes(Buffer.from('Blue mug')));
+ assert.throws(() => decryptState(a, randomBytes(32), context));
+ assert.throws(() => decryptState(a, key, 'other-namespace'));
+ const corrupt = Buffer.from(a); corrupt[30] ^= 1; assert.throws(() => decryptState(corrupt, key, context));
+ const big = emptyVault(); for (let i = 0; i < 20; i++) applyAction(big, 'signup', { name: `P${i}`, worldId: `P${i}`, objectName: 'x'.repeat(8000) });
+ assert.throws(() => encryptState(big, key, context), /storage limit/);
+});
+test('invitation claims preserve membership and private fields stay outside public state', () => {
+ const vault = emptyVault();
+ const a = applyAction(vault, 'signup', { name: 'Alice', worldId: 'ALICE', objectName: 'mug' });
+ applyAction(vault, 'groups', { name: 'Pair', creatorId: a, worldIds: ['BOB', 'bob', 'alice'] });
+ const invited = vault.groups[0].memberIds[1];
+ assert.equal(applyAction(vault, 'signup', { name: 'Bob', worldId: 'BOB', objectName: 'book' }), invited);
+ applyAction(vault, 'transactions', { groupId: vault.groups[0].id, senderId: a, recipient: 'demo', asset: 'ETH', amount: 1 });
+ assert.equal(vault.transactions[0].status, 'pending');
+ applyAction(vault, 'approve', { transactionId: vault.transactions[0].id, walletId: invited });
+ assert.equal(vault.transactions[0].status, 'completed'); validateVault(vault);
+ const state = JSON.stringify(publicState(vault)); assert.ok(!state.includes('object_name')); assert.ok(!state.includes('frequency'));
+ const bad = structuredClone(vault); bad.groups[0].memberIds.push('missing'); assert.throws(() => validateVault(bad));
+});

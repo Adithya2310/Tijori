@@ -7,13 +7,19 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node tests/flow.mjs"
+    "test": "node --experimental-strip-types --test tests/*.test.ts && node tests/flow.mjs",
+    "arkiv:check": "node --experimental-strip-types scripts/arkiv.ts check",
+    "arkiv:migrate": "node --experimental-strip-types scripts/arkiv.ts migrate",
+    "arkiv:verify": "node --experimental-strip-types scripts/arkiv.ts verify-write"
   },
   "dependencies": {
+    "@arkiv-network/sdk": "1.0.1",
     "lucide-react": "^1.69.0",
     "next": "^16.4.5",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1",
+    "viem": "^2.57.16"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
