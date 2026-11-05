@@ -1,4 +1,4 @@
-# Privacy Vault
+# Tichori
 
 A local, mock-first prototype for groups to review transactions together. Sign up using a demo World ID and object description, create a group by entering member World IDs, send a request, then log in as another member and receive and approve it. A strict majority completes the simulated request; the sender counts as the first approval.
 

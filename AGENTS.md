@@ -1,7 +1,7 @@
-# Privacy Vault contributor guide
+# Tichori contributor guide
 
 ## Product and current scope
-Privacy Vault is a local Next.js prototype for object-based identities and group transaction approvals. The current application is deliberately a simulation: no wallet, private key, blockchain transaction, World ID, DINOv2, Arkiv, Anon RPC, audio transmission, microphone access, or proximity verification exists. Never describe a mock as a security guarantee. Do not use real funds or sensitive information.
+Tichori is a local Next.js prototype for object-based identities and group transaction approvals. The current application is deliberately a simulation: no wallet, private key, blockchain transaction, World ID, DINOv2, Arkiv, Anon RPC, audio transmission, microphone access, or proximity verification exists. Never describe a mock as a security guarantee. Do not use real funds or sensitive information.
 
 ## Get started
 Use Node.js 22.20 or later (the app uses `node:sqlite`), then `npm install` and `npm run dev`. Open http://localhost:3000. SQLite is created automatically at `data/vault.sqlite`; it is local, ignored by Git, and can be deleted to reset the demo. The SQLite API is experimental in Node 22. The server needs a writable persistent filesystem; this setup is not suitable for stateless/serverless deployment.
