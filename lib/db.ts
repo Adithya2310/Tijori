@@ -12,3 +12,11 @@ CREATE TABLE IF NOT EXISTS members (group_id TEXT NOT NULL REFERENCES groups(id)
 CREATE TABLE IF NOT EXISTS transactions (id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES groups(id), sender_id TEXT NOT NULL REFERENCES wallets(id), recipient TEXT NOT NULL, amount REAL NOT NULL, asset TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS approvals (transaction_id TEXT NOT NULL REFERENCES transactions(id), wallet_id TEXT NOT NULL REFERENCES wallets(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(transaction_id,wallet_id));`);
 export default db;
+
+// Preserve databases created by the first prototype while adding demo World IDs.
+const walletColumns = db.prepare('PRAGMA table_info(wallets)').all() as {name: string}[];
+if (!walletColumns.some(column => column.name === 'world_id')) {
+ db.exec("ALTER TABLE wallets ADD COLUMN world_id TEXT");
+ db.exec("UPDATE wallets SET world_id = 'legacy-' || id WHERE world_id IS NULL");
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS wallets_world_id ON wallets(world_id COLLATE NOCASE)');
