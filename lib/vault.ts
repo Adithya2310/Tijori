@@ -4,17 +4,19 @@ import { randomUUID } from 'node:crypto';
 import { isAddress } from 'viem';
 import type { SafeRecord } from './safe.ts';
 import { validKeyEnvelope, type KeyEnvelope } from './identity-key.ts';
+import { usernameKey } from './object-username.ts';
+import { validObjectProfileReference, type ObjectProfileReference } from './object-reference.ts';
 
-export type Wallet = { id: string; name: string; address: string | null; legacy_id?: string; keyEnvelope?: KeyEnvelope; objectProfile?: ObjectProfile; object_name: string; created_at: string };
+export type Wallet = { id: string; name: string; address: string | null; legacy_id?: string; keyEnvelope?: KeyEnvelope; objectProfile?: ObjectProfile; objectProfileRef?:ObjectProfileReference; object_name: string; created_at: string };
 export type Group = { id: string; name: string; frequency: string; created_at: string; memberIds: string[]; safe?: SafeRecord };
 export type Transaction = { id: string; group_id: string; sender_id: string; recipient: string; amount: number; asset: string; note: string; status: 'pending' | 'completed'; created_at: string; approvalIds: string[] };
 /** USDT payout from a guarded Whitechain Safe. Amounts are 6-decimal base units as strings. */
 export type Proposal = { id: string; group_id: string; proposer_id: string; to: string; amount: string; note: string; invoice_id?: string; status: 'pending' | 'executed' | 'failed'; created_at: string; executed_at?: string; tx_hash?: string; session_id?: string; approver_ids?: string[]; safe_tx_hash?: string; gas_refund?: string };
 /** Vendor invoice billed to a vault's inbox (Operate add-on). webhook_url is never returned in state. */
 export type Invoice = { id: string; group_id: string; vendor_name: string; vendor_address: string; amount: string; memo: string; due_date: string; external_id?: string; webhook_url?: string; status: 'open' | 'paid'; created_at: string; reminders: number; last_reminded_at?: string; proposal_id?: string; paid_tx_hash?: string; paid_at?: string };
-export type Vault = { version: 6; proximitySessions: ProximitySession[]; wallets: Wallet[]; groups: Group[]; transactions: Transaction[]; proposals: Proposal[]; invoices: Invoice[]; operations: { id: string; digest: string; identityId?: string }[] };
+export type Vault = { version: 8; proximitySessions: ProximitySession[]; wallets: Wallet[]; groups: Group[]; transactions: Transaction[]; proposals: Proposal[]; invoices: Invoice[]; operations: { id: string; digest: string; identityId?: string }[] };
 export class VaultError extends Error {}
-export const emptyVault = (): Vault => ({ version: 6, proximitySessions: [], wallets: [], groups: [], transactions: [], proposals: [], invoices: [], operations: [] });
+export const emptyVault = (): Vault => ({ version: 8, proximitySessions: [], wallets: [], groups: [], transactions: [], proposals: [], invoices: [], operations: [] });
 const str = (x: unknown) => typeof x === 'string' ? x.trim() : '';
 const normalize = (x: unknown) => str(x).toLowerCase();
 const requireValue = (condition: unknown, message: string) => { if (!condition) throw new VaultError(message); };
@@ -34,8 +36,8 @@ export function applyAction(vault: Vault, action: string, b: Record<string, unkn
  const now = new Date().toISOString();
  if (action === 'signup') {
   const name = str(b.name), object = str(b.objectName), address = normalize(b.address);
-  requireValue(name && object && isAddress(address) && validKeyEnvelope(b.keyEnvelope), 'Enter your name and object and generate an encrypted identity key.');
-  if(b.objectProfile!==undefined){requireValue(validObjectProfile(b.objectProfile), 'Invalid object profile.');unpackObjectProfile(b.objectProfile as ObjectProfile);}
+  requireValue(name && name.length<=120 && object && isAddress(address) && validKeyEnvelope(b.keyEnvelope), 'Enter a username of at most 120 characters and generate an encrypted identity key.');
+  if(b.objectProfile!==undefined){requireValue(validObjectProfile(b.objectProfile), 'Invalid object profile.');unpackObjectProfile(b.objectProfile as ObjectProfile);requireValue(!vault.wallets.some(w=>w.address!==address&&usernameKey(w.name)===usernameKey(name)),'That username is already in use. Choose another username.');}
   const existing = vault.wallets.find(w => w.address === address);
   requireValue(!existing?.object_name, 'This address is already registered. Please log in.');
   if (existing) { existing.name = name; existing.object_name = object; existing.keyEnvelope = b.keyEnvelope as KeyEnvelope;if(b.objectProfile)existing.objectProfile=b.objectProfile as ObjectProfile; identityId = existing.id; }
@@ -43,6 +45,7 @@ export function applyAction(vault: Vault, action: string, b: Record<string, unkn
  } else if (action === 'login') {
   const user = vault.wallets.find(w => w.address === normalize(b.address) && w.object_name === str(b.objectName) && w.object_name && w.keyEnvelope);
   requireValue(user, 'Address or object did not match an encrypted identity.'); identityId = user!.id;
+  if(user!.objectProfile?.version===2||b.username!==undefined)requireValue(typeof b.username==='string'&&usernameKey(user!.name)===usernameKey(b.username)&&vault.wallets.filter(w=>usernameKey(w.name)===usernameKey(b.username as string)).length===1,'Username and identity did not match uniquely.');
  } else if (action === 'groups') {
   const name = str(b.name), creator = str(b.creatorId);
   const owner = vault.wallets.find(w => w.id === creator && w.object_name);
@@ -98,10 +101,17 @@ export function validateVault(input: unknown): Vault {
  // v4 -> v5 retains every record; only new registrations may carry an object profile.
  const v5 = (acoustic?.version === 4 ? { ...acoustic, version: 5 } : acoustic) as { version?: unknown; proposals?: unknown; invoices?: unknown };
  // v5 -> v6 is additive: empty Whitechain treasury proposal and invoice collections. Nothing else changes.
- const v = (v5?.version === 5 ? { ...v5, version: 6, proposals: Array.isArray(v5.proposals) ? v5.proposals : [], invoices: Array.isArray(v5.invoices) ? v5.invoices : [] } : v5) as Vault;
+ const treasury = (v5?.version === 5 ? { ...v5, version: 6, proposals: Array.isArray(v5.proposals) ? v5.proposals : [], invoices: Array.isArray(v5.invoices) ? v5.invoices : [] } : v5) as {version?:unknown};
+ // v6 -> v7 explicitly permits versioned multi-view profiles. Existing bytes,
+ // names, key envelopes, relationships and operation IDs remain untouched.
+ const multi = (treasury?.version===6?{...treasury,version:7}:treasury) as {version?:unknown};
+ // v7 -> v8 permits immutable external object references. The adapter performs
+ // their explicit, atomic migration; reads alone preserve existing inline data.
+ const v = (multi?.version===7?{...multi,version:8}:multi) as Vault;
  const text = (x: unknown): x is string => typeof x === 'string' && x.length <= 8192;
  const unique = (xs: string[]) => new Set(xs).size === xs.length;
- if (!v || v.version !== 6 || !Array.isArray(v.wallets) || !Array.isArray(v.groups) || !Array.isArray(v.transactions) || !Array.isArray(v.proposals) || !Array.isArray(v.invoices) || !Array.isArray(v.operations)) throw new Error('Invalid vault state.');
+ if (!v || v.version !== 8 || !Array.isArray(v.wallets) || !Array.isArray(v.groups) || !Array.isArray(v.transactions) || !Array.isArray(v.proposals) || !Array.isArray(v.invoices) || !Array.isArray(v.operations)) throw new Error('Invalid vault state.');
+ if(!v.wallets.every(w=>w&&(w.objectProfileRef===undefined||(w.address!==null&&!!w.keyEnvelope&&validObjectProfileReference(w.objectProfileRef)))))throw new Error('Invalid vault state: object reference.');
  if (!v.wallets.every(w => w && [w.id, w.name, w.object_name, w.created_at].every(text) && w.id && (w.address === null ? text(w.legacy_id) && !!w.legacy_id : typeof w.address === 'string' && isAddress(w.address) && w.address === normalize(w.address)) && (w.keyEnvelope === undefined || validKeyEnvelope(w.keyEnvelope)) && (w.objectProfile === undefined || (validObjectProfile(w.objectProfile) && !!w.keyEnvelope && !!unpackObjectProfile(w.objectProfile)))) || !unique(v.wallets.map(w => w.id)) || !unique(v.wallets.filter(w => w.address !== null).map(w => w.address!)) || !unique(v.wallets.filter(w => w.legacy_id).map(w => w.legacy_id!))) throw new Error('Invalid wallet state.');
  const walletIds = new Set(v.wallets.map(w => w.id));
  const validSafe = (safe: SafeRecord | undefined, memberCount: number) => !safe || ((safe.chainId === 84532 || safe.chainId === 1874) && (safe.guard === undefined || isAddress(safe.guard)) && isAddress(safe.address) && Array.isArray(safe.owners) && safe.owners.length === memberCount && safe.owners.every(a => isAddress(a)) && unique(safe.owners.map(a => a.toLowerCase())) && safe.threshold === Math.floor(memberCount / 2) + 1 && /^0x[\da-f]{64}$/i.test(safe.deploymentTxHash) && /^(0|[1-9]\d{0,76})$/.test(safe.saltNonce));

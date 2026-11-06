@@ -62,7 +62,9 @@ async function readBody(req: NextRequest, limit: number): Promise<Record<string,
 export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
  try {
   const { path, versioned } = route((await ctx.params).path);
-  const limit=path==='signup'||(versioned&&path==='identities')?32768:16384;
+  // Four compact views must fit the SAME 100 KB aggregate cap. The streaming
+  // request limit permits that template; it does not increase stored-state size.
+  const limit=path==='signup'||(versioned&&path==='identities')?100000:16384;
   const body = await readBody(req,limit);
   if (versioned) {
    if (path === 'objects/verify') return json(await queryWorkflow('verify-object', body));

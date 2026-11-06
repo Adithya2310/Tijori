@@ -1,4 +1,5 @@
 import 'server-only';
+import {projectedObjectStateBytes} from '../arkiv/object-codec.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { formatEther, isAddress } from 'viem';
 import { withState, storageMode, StorageError } from '../db.ts';
@@ -24,7 +25,7 @@ export function capabilities() {
 }
 function storageMetadata(vault: Vault) {return {storageMode:storageMode(),peers:vault.wallets.filter(w=>w.address&&w.keyEnvelope&&w.object_name).map(({id,name,address})=>({id,name,address}))};}
 export async function readObjectIdentities() {
- return withState(async store=>{const {vault}=await store.read();return {identities:vault.wallets.filter(w=>w.objectProfile&&w.keyEnvelope).map(w=>({name:w.name,address:w.address,keyEnvelope:w.keyEnvelope,objectProfile:w.objectProfile})),storageMode:storageMode()};});
+ return withState(async store=>{const {vault}=await store.read();return {identities:vault.wallets.filter(w=>w.objectProfile&&w.keyEnvelope).map(w=>({name:w.name,address:w.address,keyEnvelope:w.keyEnvelope,objectProfile:w.objectProfile})),storageMode:storageMode(),capacity:{usedBytes:storageMode()==='arkiv'?projectedObjectStateBytes(vault):Buffer.byteLength(JSON.stringify(vault)),maxBytes:100_000,externalProfiles:storageMode()==='arkiv',profileMaxBytes:100_000}};});
 }
 export async function readState(identityId?: string, versioned = false) {
  return withState(async store => {

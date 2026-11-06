@@ -38,7 +38,9 @@
     ".next-phone/types/**/*.ts",
     ".next-phone/dev/types/**/*.ts",
     ".next-phone-build/types/**/*.ts",
-    ".next-phone-build/dev/types/**/*.ts"
+    ".next-phone-build/dev/types/**/*.ts",
+    ".next-object-review/types/**/*.ts",
+    ".next-object-review/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -1,9 +1,6 @@
-# VILA
+# Object feature matching
 
-The browser DINOv2 matching algorithm in `lib/dino.ts` adapts `encode_full`,
-`cross_attention_sim` and the combined score from
-https://github.com/marcociama/VILA (`eval.py`, `ui/backend/server.py`).
-GroundingDINO, SAM and attention visualization are not included.
+License notice for adapted object feature matching code in `lib/dino.ts`.
 
 MIT License
 
@@ -36,3 +33,7 @@ WASM/runtime files are copied from the installed npm package (MIT; see
 alongside the downloaded model and runtime. Model files are not committed.
 
 SlimSAM ONNX weights: Xenova/slimsam-77-uniform (Apache-2.0), derived from nielsr/slimsam-77-uniform. The browser uses a user-selected foreground point; GroundingDINO is not included.
+
+# Category screening model
+
+The pinned `Xenova/mobilevit-xx-small` ONNX export derives from `apple/mobilevit-xx-small`. Its model card identifies the Apple Sample Code License; the notice is retained in `scripts/licenses/mobilevit.txt` and served beside the model. Only the checksum-verified fp32 export is used.

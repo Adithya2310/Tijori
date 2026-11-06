@@ -1,13 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { featuresFromTokens } from '../lib/dino.ts';
+import { objectFeatures } from './fixtures/object-features.ts';
 import { createObjectIdentity, parseObjectRecovery, verifyObjectRecovery, unlockObjectIdentity, DINO_OBJECT_NAME } from '../lib/dino-wallet.ts';
 import { applyAction, emptyVault, publicState, validateVault } from '../lib/vault.ts';
 
 function photo(axis: number) {
- const values = new Float32Array(257 * 384);
- for (let i = 0; i < 257; i++) values[i * 384 + axis] = 1;
- return featuresFromTokens(values, [1, 257, 384]);
+ return objectFeatures(axis * 64);
 }
 
 test('object demo recovery validates the same random identity after file roundtrip', async () => {

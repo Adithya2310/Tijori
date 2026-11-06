@@ -9,6 +9,9 @@ import { DINO_MODEL, DINO_REVISION, DINO_RUNTIME_VERSION } from '../lib/dino.ts'
 
 // Public model artifacts only. Never copy env files, recovery files or application state.
 export const modelFiles = [
+ {name:'config.json',size:69989,model:'Xenova/mobilevit-xx-small',revision:'7dce9340b0bdd8d21f013ebbaa5206979c573ad1',gitBlob:'6be34228ff7d20eab59807a10cf6a56325d65838'},
+ {name:'preprocessor_config.json',size:403,model:'Xenova/mobilevit-xx-small',revision:'7dce9340b0bdd8d21f013ebbaa5206979c573ad1',gitBlob:'5617155e1d587882708c81c2cda117c298aa6669'},
+ {name:'onnx/model.onnx',size:5394387,model:'Xenova/mobilevit-xx-small',revision:'7dce9340b0bdd8d21f013ebbaa5206979c573ad1',sha256:'70ff03c7139378ae036aa4ef2629b90a483da4b5697eb094d05a812e719fbd01'},
  {"name": "config.json", "size": 379, "model": "Xenova/slimsam-77-uniform", "revision": "5850ab45f587c112167512ffef949107115e26a0", "gitBlob": "b69eda4ef734658139fd9d27f35a1a16130ef8cf"},
  {"name": "onnx/prompt_encoder_mask_decoder_quantized.onnx", "size": 4903810, "model": "Xenova/slimsam-77-uniform", "revision": "5850ab45f587c112167512ffef949107115e26a0", "sha256": "cb90b279f549d2cab7fd6e20c38522438c65d84bdcca3d2a764cff7d857fdce2"},
  {"name": "onnx/vision_encoder_quantized.onnx", "size": 8882165, "model": "Xenova/slimsam-77-uniform", "revision": "5850ab45f587c112167512ffef949107115e26a0", "sha256": "cce23c7b2e5d4f330932738fb67ba518e04b0d99ccdd1cccd22a7da4e01f2971"},
@@ -61,6 +64,7 @@ export async function prepareDinoAssets() {
  await copyFile(join(root, 'scripts/licenses/onnxruntime.txt'), join(runtimeDirectory, 'LICENSE.txt'));
  await copyFile(join(root, 'scripts/licenses/dinov2.txt'), join(modelDirectory, 'LICENSE.txt'));
  await copyFile(join(root,'scripts/licenses/dinov2.txt'),join(assets,'models','Xenova/slimsam-77-uniform','5850ab45f587c112167512ffef949107115e26a0','LICENSE.txt'));
+ await copyFile(join(root,'scripts/licenses/mobilevit.txt'),join(assets,'models','Xenova/mobilevit-xx-small','7dce9340b0bdd8d21f013ebbaa5206979c573ad1','LICENSE.txt'));
  console.log('DINOv2, SlimSAM and WASM runtime are ready to serve locally.');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

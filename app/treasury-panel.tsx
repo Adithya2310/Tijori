@@ -114,7 +114,7 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
  const ownerName = (address: string) => data.wallets.find(w => w.address === address.toLowerCase())?.name ?? short(address);
 
  const identityCheck = () => recovery === undefined ? <p className="form-hint">Loading your identity…</p>
-  : recovery ? <><p className="form-hint">Show the object you registered with. It is matched on this device.</p><ObjectCapture isolate={!!recovery.objectProfile} autoProcess disabled={busy} onFeatures={setFeatures} /></>
+  : recovery ? <><p className="form-hint">Show the object you registered with. It is matched on this device.</p><ObjectCapture isolate={!!recovery.objectProfile} preprocessVersion={recovery.objectProfile?.version===2?2:1} autoProcess disabled={busy} onFeatures={setFeatures} /></>
   : <><label>Show your personal object<input value={objectName} onChange={e => setObjectName(e.target.value)} placeholder="Your registered object description" /></label>
    {!sessionSigner(me.address) && <label>Key passphrase<input type="password" value={passphrase} onChange={e => setPassphrase(e.target.value)} autoComplete="current-password" /></label>}</>;
  return <>

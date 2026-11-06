@@ -37,6 +37,11 @@ export async function verifyObject(vault: Vault, body: Record<string, unknown>, 
  const address = typeof body.address === 'string' ? body.address.trim().toLowerCase() : '';
  const enrollment = vault.wallets.find(w => w.address === address && w.keyEnvelope && w.object_name);
  if (!enrollment || !isAddress(address)) throw new VaultError('Address or object did not match an encrypted identity.');
+ if(enrollment.objectProfile?.version===2 || body.username!==undefined) {
+  const {usernameKey}=await import('../object-username.ts');
+  const key=typeof body.username==='string'?usernameKey(body.username):'';
+  if(!key||usernameKey(enrollment.name)!==key||vault.wallets.filter(w=>usernameKey(w.name)===key).length!==1)throw new VaultError('Username and identity did not match uniquely.');
+ }
  const result = await integrations.objectMatching.verify({ identityId: enrollment.id, address, objectName: enrollment.object_name }, { objectName: typeof body.objectName === 'string' ? body.objectName : '', evidence: evidenceFrom(body.evidence) });
  if (!result.accepted) throw new VaultError('Address or object did not match an encrypted identity.');
  return { identityId: enrollment.id, verification: result };

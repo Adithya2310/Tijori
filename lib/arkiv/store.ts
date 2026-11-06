@@ -11,15 +11,20 @@ import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { emptyVault, VaultError, type Vault } from '../vault.ts';
 import { encryptState, decryptState } from './codec.ts';
+import { encryptObjectProfile, decryptObjectProfile, objectProfileHash, dehydrateObjectProfiles } from './object-codec.ts';
+import type { ObjectProfileReference } from '../object-reference.ts';
 
 const State = defineSchema('tichori_state_v1', { namespace: str().indexed(), revision: u64(), encoding: str(), ciphertext: bytes() });
+const Objects = defineSchema('tichori_object_profile_v1', { namespace:str().indexed(),address:str(),profileHash:str(),encoding:str(),ciphertext:bytes() });
+const objectEncoding='tichori/object-profile/aes-256-gcm/v1';
 const registry = '0x4400000000000000000000000000000000000044' as const;
 const executeAbi = parseAbi(['function execute((uint8 operation, bytes operationData)[] ops) external returns (bytes32[] keys)']);
 const encoding = 'tichori/aes-256-gcm/v1';
 export class StorageError extends Error {}
 function fail(message: string): never { throw new StorageError(message); }
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-type Pending = { hash: Hex; raw: Hex; ciphertext: Hex; revision: string; nonce: number; gas: string; gasPrice: string; data: Hex; phase: 'signed' | 'receipt_confirmed'; entityKey?: Hex };
+type PendingObject = {entityKey:Hex;address:string;profileHash:string;ciphertext:Hex};
+type Pending = { hash: Hex; raw: Hex; ciphertext: Hex; revision: string; nonce: number; gas: string; gasPrice: string; data: Hex; phase: 'signed' | 'receipt_confirmed'; entityKey?: Hex;objects?:PendingObject[] };
 type Journal = { version: 1; signer: string; namespace: string; genesis: string; reservedWei: string; entityKey?: Hex; revision?: string; cipherHash?: string; lastTxHash?: Hex; lastFeeWei?: string; pending?: Pending };
 
 export async function durableJson(path: string, value: unknown) {
@@ -75,6 +80,18 @@ async function openStore(config: ReturnType<typeof arkivConfig>) {
  catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') fail('Cannot read Arkiv journal.'); journal = { version: 1, signer: account.address, namespace, genesis, reservedWei: '0' }; }
  if (journal.version !== 1 || journal.signer !== account.address || journal.namespace !== namespace || journal.genesis !== genesis || !/^\d+$/.test(journal.reservedWei)) fail('Arkiv journal/network identity mismatch. Reconcile before continuing.');
  const save = () => durableJson(path, journal);
+ const objectNamespace=namespace+':object-profile-v1';
+ const readObject=async(address:string,ref:ObjectProfileReference,expectedCiphertext?:Hex)=>{
+  const row=await reader.getEntity(ref.entityKey,Objects);
+  if(row.$owner.toLowerCase()!==account.address.toLowerCase()||row.$creator.toLowerCase()!==account.address.toLowerCase()||row.namespace.value!==objectNamespace||row.address.value!==address||row.profileHash.value!==ref.profileHash||row.encoding.value!==objectEncoding||(expectedCiphertext&&row.ciphertext.value!==expectedCiphertext))fail('Object reference readback did not match its identity.');
+  return decryptObjectProfile(Buffer.from(row.ciphertext.value.slice(2),'hex'),address,ref.profileHash,key,context);
+ };
+ const hydrate=async(vault:Vault)=>{
+  const copy=structuredClone(vault);
+  const results=await Promise.allSettled(copy.wallets.filter(w=>w.objectProfileRef).map(async wallet=>{wallet.objectProfile=await readObject(wallet.address!,wallet.objectProfileRef!);}));
+  if(results.some(result=>result.status==='rejected'))fail('Cannot retrieve and verify the encrypted object references. No fallback or replacement was used.');
+  return copy;
+ };
  const query = async () => {
   const page = await reader.select({ $key: true, $owner: true, $creator: true, $expiresAt: true, namespace: true, revision: true, encoding: true, ciphertext: true })
    .from(State, { onMismatch: 'throw' }).createdBy(account.address).ownedBy(account.address).where(eq('namespace', namespace)).limit(2).fetch();
@@ -100,11 +117,19 @@ async function openStore(config: ReturnType<typeof arkivConfig>) {
    }
   }
   if (!p.entityKey) fail('Confirmed write has no matching entity key. Reconcile without resending.');
+  for(const object of p.objects??[]){
+   const created=receipt.logs.some(log=>{if(log.address.toLowerCase()!==registry)return false;try{const event=decodeEventLog({abi:ENTITY_EVENTS_ABI,data:log.data,topics:log.topics});return event.eventName==='EntityCreated'&&event.args.entityKey===object.entityKey&&event.args.owner.toLowerCase()===account.address.toLowerCase();}catch{return false;}});
+   if(!created)fail('Confirmed batch did not create the expected object reference. Do not resend.');
+  }
   p.phase = 'receipt_confirmed'; journal.lastTxHash = p.hash; journal.lastFeeWei = (receipt.gasUsed * receipt.effectiveGasPrice).toString(); await save();
   let matched = false;
   for (let i = 0; i < 5; i++) {
    const row = await query();
-   if (row?.$key === p.entityKey && row.revision.value === BigInt(p.revision) && row.ciphertext.value === p.ciphertext) { decryptState(Buffer.from(p.ciphertext.slice(2), 'hex'), key, context); matched = true; break; }
+   if (row?.$key === p.entityKey && row.revision.value === BigInt(p.revision) && row.ciphertext.value === p.ciphertext) {
+    const vault=decryptState(Buffer.from(p.ciphertext.slice(2),'hex'),key,context);
+    for(const object of p.objects??[])await readObject(object.address,{version:1,entityKey:object.entityKey,profileHash:object.profileHash},object.ciphertext);
+    await hydrate(vault);matched=true;break;
+   }
    await new Promise(r => setTimeout(r, 1000));
   }
   if (!matched) fail('Arkiv receipt confirmed, but state readback did not match. Reconcile without resending.');
@@ -113,16 +138,33 @@ async function openStore(config: ReturnType<typeof arkivConfig>) {
  await reconcile();
  const read = async () => {
   const row = await query();
-  if (!row) return { vault: emptyVault(), revision: 0n, entityKey: undefined };
+  if (!row) return { vault: emptyVault(), revision: 0n, entityKey: undefined, cipherHash:undefined };
   if (journal.revision && (row.revision.value !== BigInt(journal.revision) || digest(row.ciphertext.value) !== journal.cipherHash)) fail('Arkiv state differs from the verified journal.');
-  const vault = decryptState(Buffer.from(row.ciphertext.value.slice(2), 'hex'), key, context);
+  const vault = await hydrate(decryptState(Buffer.from(row.ciphertext.value.slice(2), 'hex'), key, context));
   if (!journal.entityKey) { journal.entityKey = row.$key; journal.revision = row.revision.value.toString(); journal.cipherHash = digest(row.ciphertext.value); await save(); }
-  return { vault, revision: row.revision.value, entityKey: row.$key };
+  return { vault, revision: row.revision.value, entityKey: row.$key, cipherHash:digest(row.ciphertext.value) };
  };
  const write = async (vault: Vault, previous: Awaited<ReturnType<typeof read>>) => {
   const cap = process.env.ARKIV_MAX_TOTAL_FEE_TGLM;
   if (!cap || !/^\d+(\.\d{1,18})?$/.test(cap) || parseEther(cap) <= 0n) fail('Set an approved ARKIV_MAX_TOTAL_FEE_TGLM before enabling writes.');
-  const ciphertext = `0x${encryptState(vault, key, context).toString('hex')}` as Hex;
+  const prepared=structuredClone(vault);
+  const newObjects=prepared.wallets.filter(w=>w.objectProfile&&!w.objectProfileRef);
+  let expectedEntityNonce:bigint|undefined;
+  let predictions:{key:Hex;salt:bigint}[]=[];
+  if(newObjects.length){
+   expectedEntityNonce=await reader.getEntityNonce(account.address);
+   predictions=await reader.predictEntityKeys({owner:account.address,count:newObjects.length+(previous.entityKey?0:1)});
+   if(await reader.getEntityNonce(account.address)!==expectedEntityNonce)fail('Another writer changed the entity nonce during preparation. Nothing was signed.');
+  }
+  const objects:PendingObject[]=newObjects.map((wallet,index)=>{
+   const profileHash=objectProfileHash(wallet.objectProfile!);
+   const entityKey=predictions[index].key;
+   wallet.objectProfileRef={version:1,entityKey,profileHash};
+   return {entityKey,address:wallet.address!,profileHash,ciphertext:`0x${encryptObjectProfile(wallet.address!,wallet.objectProfile!,key,context).toString('hex')}`};
+  });
+  const stateKey=previous.entityKey??(objects.length?predictions[objects.length].key:undefined);
+  const storedVault=dehydrateObjectProfiles(prepared);
+  const ciphertext = `0x${encryptState(storedVault, key, context).toString('hex')}` as Hex;
   const revision = previous.revision + 1n;
   const values = { namespace, revision: u64(revision), encoding, ciphertext: Buffer.from(ciphertext.slice(2), 'hex') };
   let attempted = false;
@@ -132,7 +174,7 @@ async function openStore(config: ReturnType<typeof arkivConfig>) {
    const input = (params as [{ to: Hex; data: Hex }])[0];
    if (input.to.toLowerCase() !== registry) fail('Unexpected Arkiv recipient.');
    const decoded = decodeFunctionData({ abi: executeAbi, data: input.data });
-   if (decoded.args[0].length !== 1 || decoded.args[0][0].operation !== (previous.entityKey ? 2 : 1)) fail('Unexpected Arkiv operation.');
+   if (decoded.args[0].length !== objects.length+1 || decoded.args[0].some((op,i)=>op.operation!==(i<objects.length?1:previous.entityKey?2:1))) fail('Unexpected Arkiv operation.');
    if (await reader.getChainId() !== 7794095) fail('Wrong signing network.');
    const call = { account: account.address, to: registry, data: input.data, value: 0n };
    const estimate = await estimateGas(reader, { ...call, blockTag: 'latest' });
@@ -148,10 +190,13 @@ async function openStore(config: ReturnType<typeof arkivConfig>) {
    const freshEstimate = await estimateGas(reader, { ...call, blockTag: 'latest' });
    const freshHead = await reader.getBlock({ blockTag: 'latest' });
    if (gas < freshEstimate * 2n || gas > freshHead.gasLimit / 2n || await getGasPrice(reader) !== gasPrice || await reader.getTransactionCount({ address: account.address, blockTag: 'latest' }) !== nonce) fail('Arkiv quote changed. No transaction was signed.');
+   const current=await query();
+   if(previous.entityKey?(current?.$key!==previous.entityKey||current.revision.value!==previous.revision||digest(current.ciphertext.value)!==previous.cipherHash):!!current)fail('Arkiv state changed after it was read. Nothing was signed; refresh and investigate other writers.');
+   if(expectedEntityNonce!==undefined&&await reader.getEntityNonce(account.address)!==expectedEntityNonce)fail('Another writer changed the entity nonce. Nothing was signed.');
    const raw = await account.signTransaction({ chainId: 7794095, type: 'legacy', to: registry, data: input.data, value: 0n, gas, gasPrice, nonce });
    const hash = keccak256(raw);
    journal.reservedWei = (BigInt(journal.reservedWei) + maximum).toString();
-   journal.pending = { hash, raw, ciphertext, revision: revision.toString(), nonce, gas: gas.toString(), gasPrice: gasPrice.toString(), data: input.data, phase: 'signed', entityKey: previous.entityKey };
+   journal.pending = { hash, raw, ciphertext, revision: revision.toString(), nonce, gas: gas.toString(), gasPrice: gasPrice.toString(), data: input.data, phase: 'signed', entityKey: stateKey,...(objects.length?{objects}:{}) };
    await save(); // Fsync signed intent BEFORE forwarding to RPC. Never log raw bytes.
    const returned = await sendRawTransaction(reader, { serializedTransaction: raw });
    if (returned !== hash) fail('RPC returned an unexpected hash. Inspect the journal.');
@@ -159,7 +204,12 @@ async function openStore(config: ReturnType<typeof arkivConfig>) {
   } }, { retryCount: 0 }) });
   try {
    // Explicit gas avoids the SDK's default estimator; the transport estimates the exact encoded operation.
-   if (previous.entityKey) await wallet.patchEntity(State, previous.entityKey, { set: values }, { gas: 1_000_000n });
+   if(objects.length){
+    const creates=objects.map((object,i)=>({schema:Objects,values:{namespace:objectNamespace,address:object.address,profileHash:object.profileHash,encoding:objectEncoding,ciphertext:Buffer.from(object.ciphertext.slice(2),'hex')},expiration:ExpirationTime.fromDays(30),flags:{readonly:true},salt:predictions[i].salt}));
+    if(previous.entityKey)await wallet.executeBatch({creates,patches:[{schema:State,entityKey:previous.entityKey,set:values}]},{gas:1_000_000n});
+    else await wallet.executeBatch({creates:[...creates,{schema:State,values,expiration:ExpirationTime.fromDays(30),salt:predictions[objects.length].salt}]},{gas:1_000_000n});
+   }
+   else if (previous.entityKey) await wallet.patchEntity(State, previous.entityKey, { set: values }, { gas: 1_000_000n });
    else await wallet.createEntity(State, values, { expiration: ExpirationTime.fromDays(30) }, { gas: 1_000_000n });
    await reconcile();
   } catch (e) { if (e instanceof StorageError) throw e; fail(journal.pending ? 'Arkiv write requires reconciliation. Its signed hash is saved locally; do not submit it again.' : 'Arkiv write preparation failed; no transaction was broadcast.'); }

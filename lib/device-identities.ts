@@ -40,9 +40,13 @@ export async function saveDeviceIdentity(identity: DeviceIdentity): Promise<void
 }
 
 export async function listServerIdentities(): Promise<DeviceIdentity[]> {
+ return (await readServerIdentities()).identities;
+}
+export async function readServerIdentities(): Promise<{identities:DeviceIdentity[];storageMode:'arkiv'|'local';capacity?:{usedBytes:number;maxBytes:number;externalProfiles?:boolean;profileMaxBytes?:number}}> {
  const response=await fetch('/api/object-identities',{cache:'no-store'});
  const result=await response.json();
  if(!response.ok)throw Error(result.error||'Could not retrieve stored identities.');
  const {unpackObjectProfile}=await import('./object-profile.ts');
- return result.identities.map((record: {name:string;address:string;keyEnvelope:ObjectRecovery['keyEnvelope'];objectProfile:import('./object-profile.ts').ObjectProfile})=>validateDeviceIdentity({version:1,name:record.name,status:'registered',recovery:{version:1,kind:'tichori-insecure-object-demo',address:record.address,keyEnvelope:record.keyEnvelope,objectProfile:record.objectProfile,features:unpackObjectProfile(record.objectProfile)}}));
+ if(!['arkiv','local'].includes(result.storageMode)||!Array.isArray(result.identities))throw Error('Invalid identity storage response.');
+ return {storageMode:result.storageMode,capacity:result.capacity,identities:result.identities.map((record: {name:string;address:string;keyEnvelope:ObjectRecovery['keyEnvelope'];objectProfile:import('./object-profile.ts').ObjectProfile})=>validateDeviceIdentity({version:1,name:record.name,status:'registered',recovery:{version:1,kind:'tichori-insecure-object-demo',address:record.address,keyEnvelope:record.keyEnvelope,objectProfile:record.objectProfile,features:unpackObjectProfile(record.objectProfile)}}))};
 }

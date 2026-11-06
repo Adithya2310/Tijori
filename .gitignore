@@ -8,6 +8,7 @@ data/
 
 .next-phone/
 .next-phone-build/
+.next-object-review/
 .local-https/
 
 # Object demo recovery files contain sufficient material to recover identity keys.
@@ -15,6 +16,7 @@ tichori-object-demo-*.json
 
 # Downloaded public model/runtime assets (prepared before builds).
 public/dino-assets/
+object-evaluation-*.json
 # Local agent skills and notes (not shared)
 .agents/
 .claude/skills/whitechain-dev
