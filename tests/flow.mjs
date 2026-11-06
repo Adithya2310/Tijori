@@ -8,6 +8,8 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+const addr = n => '0x' + n.toString(16).padStart(40, '0');
+const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
 const dir = await mkdtemp(join(tmpdir(), 'privacy-vault-test-'));
 const port = 3178;
 const rpc = await rpcFixture();
@@ -23,25 +25,28 @@ try {
  let ready = false;
  for (let i=0;i<100;i++) { try { if ((await request('state')).status === 200) { ready=true; break; } } catch {} await new Promise(r=>setTimeout(r,100)); }
  assert.ok(ready, 'server started');
- let result=await request('signup',{name:'Person 0',worldId:'person0',objectName:'Object 0'});
+ let result=await request('signup',{name:'Person 0',address:addr(1),keyEnvelope,objectName:'Object 0'});
  assert.equal(result.status,200); const creator=result.data.identityId;
- assert.equal((await request('login',{worldId:'person0',objectName:'wrong'})).status,400);
- assert.equal((await request('login',{worldId:'PERSON0',objectName:'Object 0'})).data.identityId,creator);
- const loopbackLogin=await fetch(`http://127.0.0.1:${port}/api/login`,{method:'POST',headers:{'Content-Type':'application/json',Origin:`http://127.0.0.1:${port}`},body:JSON.stringify({worldId:'person0',objectName:'Object 0'})});
+ assert.equal((await request('login',{address:addr(1),keyEnvelope,objectName:'wrong'})).status,400);
+ assert.equal((await request('login',{address:addr(1),keyEnvelope,objectName:'Object 0'})).data.identityId,creator);
+ const loopbackLogin=await fetch(`http://127.0.0.1:${port}/api/login`,{method:'POST',headers:{'Content-Type':'application/json',Origin:`http://127.0.0.1:${port}`},body:JSON.stringify({address:addr(1),keyEnvelope,objectName:'Object 0'})});
  assert.equal(loopbackLogin.status,200,'browser same-origin loopback login');
  assert.equal((await loopbackLogin.json()).identityId,creator);
- assert.equal((await request('signup',{name:'Duplicate',worldId:'PERSON0',objectName:'Object'})).status,400);
- assert.equal((await request('groups',{name:'Bad',creatorId:creator,worldIds:[]})).status,400);
- result=await request('groups',{name:'Family',creatorId:creator,worldIds:['person1','person2','person3','person4']});
+ assert.equal((await request('signup',{name:'Duplicate',address:addr(1),keyEnvelope,objectName:'Object'})).status,400);
+ assert.equal((await request('groups',{name:'Bad',creatorId:creator,addresses:[]})).status,400);
+ const beforeInvalidSafe=rpc.control.sends;
+ assert.equal((await request('register-safe',{name:'Bad Safe',creatorId:creator,owners:['invalid'],saltNonce:'1',address:'invalid',deploymentTxHash:'invalid'})).status,400);
+ assert.equal(rpc.control.sends,beforeInvalidSafe); // Invalid Safe data must never trigger an Arkiv write.
+ result=await request('groups',{name:'Family',creatorId:creator,addresses:[addr(2),addr(3),addr(4),addr(5)]});
  let state=result.data; const group=state.groups[0];
  assert.equal(group.members.length,5); assert.ok(!('frequency' in group));
- const invited=group.members.find(w=>w.world_id==='person1').id;
- result=await request('signup',{name:'Person 1',worldId:'person1',objectName:'Object 1'});
+ const invited=group.members.find(w=>w.address===addr(2)).id;
+ result=await request('signup',{name:'Person 1',address:addr(2),keyEnvelope,objectName:'Object 1'});
  assert.equal(result.data.identityId,invited); // Claim the invitation, don't duplicate membership.
- for (let i=2;i<5;i++) await request('signup',{name:`Person ${i}`,worldId:`person${i}`,objectName:`Object ${i}`});
+ for (let i=2;i<5;i++) await request('signup',{name:`Person ${i}`,address:addr(i+1),keyEnvelope,objectName:`Object ${i}`});
  state=(await request('state')).data; const ids=state.groups[0].members.map(w=>w.id);
  assert.equal(ids.length,5);
- await request('groups',{name:'Second',creatorId:creator,worldIds:['person1']});
+ await request('groups',{name:'Second',creatorId:creator,addresses:[addr(2)]});
  assert.equal(rpc.control.sends,7); // Login and rejected requests do not spend gas.
  assert.ok(rpc.entity().attributes.some(a=>a.name==='ciphertext'));
  assert.ok(!JSON.stringify(rpc.entity()).includes('Object 0'));
@@ -55,23 +60,23 @@ try {
  assert.equal((await request('state')).data.transactions[0].status,'completed');
  // Lost send response must reconcile the original signed transaction, without another send.
  const before=rpc.control.sends; rpc.control.loseSendResponse=true; rpc.control.hideReceipt=true;
- assert.equal((await request('groups',{name:'Recovered',creatorId:creator,worldIds:['person1']})).status,503);
+ assert.equal((await request('groups',{name:'Recovered',creatorId:creator,addresses:[addr(2)]})).status,503);
  assert.equal((await request('state')).status,503);
  assert.equal(rpc.control.sends,before+1); rpc.control.hideReceipt=false;
  assert.equal((await request('state')).data.groups[0].name,'Recovered');
  assert.equal(rpc.control.sends,before+1);
  rpc.control.failQuery=true; assert.equal((await request('state')).status,503); rpc.control.failQuery=false;
  rpc.control.failEstimate=true; const sends=rpc.control.sends;
- assert.equal((await request('groups',{name:'No broadcast',creatorId:creator,worldIds:['person1']})).status,503);
+ assert.equal((await request('groups',{name:'No broadcast',creatorId:creator,addresses:[addr(2)]})).status,503);
  assert.equal(rpc.control.sends,sends); rpc.control.failEstimate=false;
  rpc.control.duplicate=true; assert.equal((await request('state')).status,503); rpc.control.duplicate=false;
  rpc.control.erase=true; assert.equal((await request('state')).status,503); rpc.control.erase=false;
  rpc.control.reset=true; assert.equal((await request('state')).status,503); rpc.control.reset=false;
  rpc.control.gasPrice=10n**18n;
- assert.equal((await request('groups',{name:'Over budget',creatorId:creator,worldIds:['person1']})).status,503);
+ assert.equal((await request('groups',{name:'Over budget',creatorId:creator,addresses:[addr(2)]})).status,503);
  assert.equal(rpc.control.sends,sends); rpc.control.gasPrice=1n;
  const operationId='repeat-safely'; const beforeReplay=rpc.control.sends;
- const input={name:'Idempotent',creatorId:creator,worldIds:['person1']};
+ const input={name:'Idempotent',creatorId:creator,addresses:[addr(2)]};
  assert.equal((await request('groups',input,{'Idempotency-Key':operationId})).status,200);
  assert.equal((await request('groups',input,{'Idempotency-Key':operationId})).status,200);
  assert.equal(rpc.control.sends,beforeReplay+1);
