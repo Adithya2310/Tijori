@@ -61,6 +61,17 @@ test('mask choice prefers the whole object over the part under the point, and ne
  for (let i = 50; i < 60; i++) masks[i] = 1;            // mask 0: the label under the point (10%)
  for (let i = 20; i < 80; i++) masks[size + i] = 1;     // mask 1: the whole bottle (60%)
  for (let i = 0; i < 100; i++) masks[2 * size + i] = 1; // mask 2: everything (100%)
- assert.equal(chooseMask(masks, [0.95, 0.9, 0.99], size, seed), 1);
+ assert.equal(chooseMask(masks, [0.95, 0.9, 0.99], size, seed), 1, 'without a circle, the larger confident object mask wins');
  assert.equal(chooseMask(masks, [0.95, 0.5, 0.99], size, seed), 0, 'a low-confidence large mask is not preferred');
+});
+
+test('inside the guide circle, the object wins over the hand and person holding it', async () => {
+ const { chooseMask, guideDisc } = await import('@tijori/client/object-geometry');
+ const w = 40, h = 30, size = w * h, disc = guideDisc(w, h), seed = 15 * w + 20;
+ const masks = new Uint8Array(size * 3);
+ for (let y = 9; y < 22; y++) for (let x = 16; x < 25; x++) masks[y * w + x] = 1;                       // 0: the bottle, inside the circle
+ for (let y = 9; y < 30; y++) for (let x = 2; x < 38; x++) if (y > 12 || (x > 15 && x < 25)) masks[size + y * w + x] = 1; // 1: bottle + hand + person
+ for (let y = 14; y < 17; y++) for (let x = 16; x < 25; x++) masks[2 * size + y * w + x] = 1;          // 2: the label only
+ assert.equal(chooseMask(masks, [0.9, 0.97, 0.95], size, seed, disc), 0);
+ assert.ok(disc.reduce((a, b) => a + b, 0) / size < 0.5, 'the circle covers well under half a landscape photo');
 });

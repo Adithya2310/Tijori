@@ -46,3 +46,11 @@ const hardest = [...chosen.impostor].sort((a, b) => b.score - a.score).slice(0, 
 console.log('Closest wrong objects:', hardest.map(h => `${h.query} as ${h.label}: ${h.score.toFixed(3)}`).join('; '));
 const weakest = [...chosen.genuine].sort((a, b) => a.score - b.score).slice(0, 3);
 console.log('Hardest same-object logins:', weakest.map(w => `${w.label}: ${w.score.toFixed(3)}`).join('; '));
+
+// Silhouettes (16 × 16 coverage, 0–9) of the most suspicious photos, when the lab recorded them.
+const show = sample => sample?.grid ? Array.from({ length: 16 }, (_, row) => sample.grid.slice(row * 16, row * 16 + 16).replace(/0/g, '·')).join('\n') : '(no silhouette recorded)';
+const sampleOf = label => samples.find(s => s.label === label && s.grid);
+if (samples.some(s => s.grid)) {
+ console.log(`\nObject share of each photo: ${samples.map(s => `${s.label} ${s.objectFraction ?? '?'}`).join(', ')}`);
+ for (const label of labels) console.log(`\nSilhouette of ${label} (first photo):\n${show(sampleOf(label))}`);
+}

@@ -9,20 +9,35 @@ export const OBJECT_NOT_FOUND = 'No object found at the centre. Hold your object
 
 // Quality gate: an object must be found, and the "object" must not be the whole frame or background.
 export const MIN_OBJECT_FRACTION = 0.005, MAX_OBJECT_FRACTION = 0.9;
+/** Diameter of the on-screen guide circle as a fraction of the photo's shorter side. The object belongs inside it. */
+export const GUIDE_FRACTION = 0.7;
+/** Pixels of a `width` × `height` photo inside the centred guide circle. */
+export function guideDisc(width: number, height: number): Uint8Array {
+ const disc = new Uint8Array(width * height), radius = (GUIDE_FRACTION / 2) * Math.min(width, height), cx = (width - 1) / 2, cy = (height - 1) / 2;
+ for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) disc[y * width + x] = (x - cx) ** 2 + (y - cy) ** 2 <= radius * radius ? 1 : 0;
+ return disc;
+}
 /**
- * Pick the SAM mask for the whole object at the prompt point. SAM returns nested masks (part, sub-object, object);
- * the best-scoring one is often just the part under the point (a bottle's label). Among confident masks that
- * contain the point and are not the whole frame, take the largest.
+ * Pick the SAM mask for the object in the guide circle. SAM's candidates are nested: part (a bottle's label), the
+ * object, and something bigger (object + hand + head, or the table). Among confident candidates that contain the
+ * prompt point, take the largest one lying entirely inside the circle: bigger regions spill over its edge (the person
+ * holding the object), smaller ones are parts. When nothing fits inside (the object fills the circle), fall back to the
+ * best in-circle fit, area inside × (share inside)²; the caller then trims the region to the circle.
  */
-export function chooseMask(masks: Uint8Array, scores: number[], size: number, seedIndex: number): number {
+export function chooseMask(masks: Uint8Array, scores: number[], size: number, seedIndex: number, disc?: Uint8Array): number {
  const candidates = scores.map((score, index) => {
-  let area = 0; for (let i = index * size, end = i + size; i < end; i++) area += masks[i] ? 1 : 0;
-  return { score, index, fraction: area / size, hasSeed: !!masks[index * size + seedIndex] };
+  let area = 0, inside = 0;
+  for (let i = 0; i < size; i++) if (masks[index * size + i]) { area++; if (!disc || disc[i]) inside++; }
+  const share = area ? inside / area : 0;
+  return { score, index, fraction: area / size, share, hasSeed: !!masks[index * size + seedIndex], fit: inside * share * share };
  });
  const usable = candidates.filter(c => c.hasSeed && c.fraction >= MIN_OBJECT_FRACTION && c.fraction <= MAX_OBJECT_FRACTION);
  if (!usable.length) return [...candidates].sort((a, b) => b.score - a.score)[0].index;
  const top = Math.max(...usable.map(c => c.score));
- return usable.filter(c => c.score >= 0.75 * top).sort((a, b) => b.fraction - a.fraction)[0].index;
+ const confident = usable.filter(c => c.score >= 0.6 * top);
+ const contained = confident.filter(c => c.share >= 0.95);
+ if (contained.length) return contained.sort((a, b) => b.fraction - a.fraction)[0].index;
+ return confident.sort((a, b) => b.fit - a.fit)[0].index;
 }
 
 /** Keep only the 4-connected region of `mask` that contains `seed` (or the largest region if the seed is outside). */
@@ -64,7 +79,7 @@ export function squareCrop(region: Uint8Array, width: number, height: number) {
 
 /** A scanner v2 descriptor: CLS token plus the mean of the object's patch tokens, and the scan's quality. */
 /** `preview` is the isolated object crop (local only, never uploaded) so the UI can show what was scanned. */
-export type ObjectScanResult = { descriptor: { cls: number[]; fg: number[] }; objectFraction: number; foregroundPatches: number; preview?: Blob };
+export type ObjectScanResult = { descriptor: { cls: number[]; fg: number[] }; objectFraction: number; foregroundPatches: number; preview?: Blob; /** 16 × 16 patch coverage of the isolated object (a coarse silhouette, no pixels). */ grid?: number[] };
 /** Patches at least this covered by the object count as foreground. */
 export const FOREGROUND_COVERAGE = 0.35;
 /** Pool DINOv2 tokens ([1, 257, 384]) into CLS and an object-only (foreground) mean, using the patch coverage grid. */

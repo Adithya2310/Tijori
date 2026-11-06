@@ -1,7 +1,7 @@
 import { SamModel, AutoProcessor, RawImage, type SamProcessor } from '@huggingface/transformers';
 export const SAM_MODEL = 'Xenova/slimsam-77-uniform';
 export const SAM_REVISION = '5850ab45f587c112167512ffef949107115e26a0';
-import { CENTRE, OBJECT_NOT_FOUND, MAX_OBJECT_FRACTION, MIN_OBJECT_FRACTION, chooseMask, regionAt, squareCrop, type ObjectPoint } from './object-geometry.ts';
+import { CENTRE, OBJECT_NOT_FOUND, MAX_OBJECT_FRACTION, MIN_OBJECT_FRACTION, chooseMask, guideDisc, regionAt, squareCrop, type ObjectPoint } from './object-geometry.ts';
 export { CENTRE, PATCH_GRID, OBJECT_NOT_FOUND, type ObjectPoint } from './object-geometry.ts';
 export type IsolatedObject = {
  /** Square PNG: the object on white, centred and padded (never stretched). */
@@ -45,8 +45,11 @@ export async function isolateObjectRegion(blob: Blob, point: ObjectPoint = CENTR
   const output = await sam(inputs);
   const masks = await (preprocess as SamProcessor).post_process_masks(output.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes);
   const scores = Array.from(output.iou_scores.data as Float32Array), all = masks[0].data as Uint8Array, size = width * height;
-  const chosen = chooseMask(all, scores, size, Math.min(height - 1, Math.round(seed.y)) * width + Math.min(width - 1, Math.round(seed.x)));
-  const region = regionAt(all.subarray(chosen * size, (chosen + 1) * size), width, height, seed);
+  // Only what lies inside the guide circle counts: hands, arms and background outside it are ignored.
+  const disc = guideDisc(width, height);
+  const chosen = chooseMask(all, scores, size, Math.min(height - 1, Math.round(seed.y)) * width + Math.min(width - 1, Math.round(seed.x)), disc);
+  const inCircle = all.slice(chosen * size, (chosen + 1) * size).map((value, i) => (value && disc[i] ? 1 : 0));
+  const region = regionAt(inCircle, width, height, seed);
   const crop = squareCrop(region, width, height);
   if (!crop || crop.objectFraction < MIN_OBJECT_FRACTION || crop.objectFraction > MAX_OBJECT_FRACTION) throw Error(OBJECT_NOT_FOUND);
   if (cancelled()) throw Error('Cancelled.');

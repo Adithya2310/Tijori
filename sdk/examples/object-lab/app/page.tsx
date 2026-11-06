@@ -8,8 +8,10 @@ import { DINO_MODEL, DINO_REVISION } from '@tijori/core/dino';
 import { packObjectView, unpackObjectView } from '@tijori/core/object-profile';
 import { compareObjectViews, OBJECT_MATCH_CLS_WEIGHT, OBJECT_MATCH_THRESHOLD } from '@tijori/core/object-match';
 
-type Sample = { label: string; category: string; view: string; at: string };
-const STORE = 'tj-object-lab-v1';
+/** `grid`: 16 × 16 coverage of what was isolated (a coarse silhouette for diagnostics, no pixels). */
+type Sample = { label: string; category: string; view: string; at: string; objectFraction?: number; grid?: string };
+const silhouette = (grid?: number[]) => grid ? grid.map(v => Math.min(9, Math.floor(v * 10))).join('') : undefined;
+const STORE = 'tj-object-lab-v2';
 // Samples live in localStorage (this browser only), read through an external store so server and client agree.
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
@@ -43,13 +45,13 @@ export default function ObjectLab() {
   try {
    const [result] = await extractObjectDescriptors(photos, { onProgress: setStatus });
    if (result.preview) setPreview(previous => { if (previous) URL.revokeObjectURL(previous); return URL.createObjectURL(result.preview!); });
-   setSamples(list => [...list, { label: label.trim(), category: (category.trim() || label.trim()).toLowerCase(), view: packObjectView(result.descriptor), at: new Date().toISOString() }]);
+   setSamples(list => [...list, { label: label.trim(), category: (category.trim() || label.trim()).toLowerCase(), view: packObjectView(result.descriptor), at: new Date().toISOString(), objectFraction: Math.round(result.objectFraction * 1000) / 1000, grid: silhouette(result.grid) }]);
    setStatus(`Saved photo ${(counts[label.trim()] ?? 0) + 1} of ${label.trim()} (object covers ${Math.round(result.objectFraction * 100)}% of the photo).`);
   } catch (e) { setError(e instanceof Error ? e.message : 'Could not read the object.'); setStatus(''); }
   finally { setBusy(false); }
  }
  function download() {
-  const data = { version: 1, model: DINO_MODEL, revision: DINO_REVISION, encoding: 'dinov2-fg-q8', samples };
+  const data = { version: 2, model: DINO_MODEL, revision: DINO_REVISION, encoding: 'dinov2-fg-q8', samples };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
   const link = document.createElement('a'); link.href = url; link.download = `tijori-object-calibration-${samples.length}.json`; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
@@ -57,7 +59,7 @@ export default function ObjectLab() {
  return <main className="tj-root" style={{ minHeight: '100vh', padding: '32px 6vw' }}>
   <div style={{ maxWidth: 760, margin: '0 auto', display: 'grid', gap: 18 }}>
    <div><div className="tj-section-kicker">TIJORI · OBJECT LAB</div><h1 style={{ fontFamily: 'var(--tj-font-display, serif)', fontWeight: 400 }}>Calibrate object matching</h1>
-    <p className="tj-form-hint">Photograph 4–6 everyday objects, including two of the same kind (for example two different bottles). Take about 4 photos of each from different sides and angles, holding the object in the circle. Use a new label per object and the same category for objects of the same kind. Only compact descriptors are stored in this browser, never photos.</p></div>
+    <p className="tj-form-hint">Photograph 4–6 everyday objects, including two of the same kind (for example two different bottles). Take about 4 photos of each from different sides and angles, with the whole object inside the circle (not touching its edge). Check the cut-out after each photo: it should show only the object; retake (Undo last photo) if it includes your hand or face. Use a new label per object and the same category for objects of the same kind. Only compact descriptors are stored in this browser, never photos.</p></div>
    <div className="tj-details"><div><span>Label (this exact object)</span><strong><input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. blue-bottle" /></strong></div><div><span>Category</span><strong><input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g. bottle" /></strong></div></div>
    {!busy && <CameraCapture onStart={() => setError('')} onCapture={photos => void capture(photos)} captureLabel="Take photo" />}
    <p className="tj-form-hint" role="status">{status}</p>

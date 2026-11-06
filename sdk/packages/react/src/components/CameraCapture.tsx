@@ -76,7 +76,7 @@ export default function CameraCapture({ onStart, onCapture, burst = 1, burstInte
    <video ref={video} autoPlay muted playsInline className="tj-object-preview" aria-label="Live object camera preview"/>
    <span className="tj-camera-guide" aria-hidden="true"/>
   </div>
-  {state !== 'idle' && <p className="tj-form-hint">{burst > 1 ? 'Hold your object inside the circle. After you tap Scan, turn it slowly for about two seconds.' : 'Hold your object inside the circle, then take the photo.'}</p>}
+  {state !== 'idle' && <p className="tj-form-hint">{burst > 1 ? 'Fit the whole object inside the circle, a little in front of you (not touching the edge). After you tap Scan, turn it slowly for about two seconds.' : 'Fit the whole object inside the circle, a little in front of you, then take the photo.'}</p>}
   {state === 'idle' ? <button type="button" className="tj-light-btn" onClick={() => void open()}>Open camera</button> : <div className="tj-camera-actions"><button type="button" className="tj-primary" disabled={state !== 'live'} onClick={() => void capture()}>{label}</button><button type="button" className="tj-light-btn" onClick={close}>Close camera</button></div>}
   {error && <p className="tj-error" role="alert">{error}</p>}
  </div>;

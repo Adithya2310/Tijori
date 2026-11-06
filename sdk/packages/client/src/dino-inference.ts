@@ -90,6 +90,6 @@ export async function runObjectDescriptor(imageBlob: Blob, progress: (message: s
   progress('Reading your object on this device…');
   const { data, dims } = await embed(model, isolated.blob, cancelled);
   const { cls, fg, foregroundPatches } = poolForeground(data, dims, isolated.grid);
-  return { descriptor: { cls, fg }, objectFraction: isolated.objectFraction, foregroundPatches, preview: isolated.blob };
+  return { descriptor: { cls, fg }, objectFraction: isolated.objectFraction, foregroundPatches, preview: isolated.blob, grid: Array.from(isolated.grid, v => Math.round(v * 100) / 100) };
  } finally { listeners.delete(progress); }
 }
