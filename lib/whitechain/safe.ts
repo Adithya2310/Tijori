@@ -1,7 +1,7 @@
 import 'server-only';
 import { getAddress, type Address } from 'viem';
-import { SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID, WHITECHAIN_USDT } from './chain.ts';
-import { assertWhitechain, whitechainClient } from './config.ts';
+import { SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID } from './chain.ts';
+import { assertWhitechain, usdtAddress, whitechainClient } from './config.ts';
 import { erc20Abi, safeAbi } from './safe-tx.ts';
 
 /** Live Safe status on Whitechain Sepolia: owners, threshold, nonce, guard, WBT and USDT balances. */
@@ -15,7 +15,7 @@ export async function readWhitechainSafe(address: Address) {
   client.readContract({ address: safe, abi: safeAbi, functionName: 'getThreshold' }),
   client.readContract({ address: safe, abi: safeAbi, functionName: 'nonce' }),
   client.getBalance({ address: safe }),
-  client.readContract({ address: WHITECHAIN_USDT, abi: erc20Abi, functionName: 'balanceOf', args: [safe] }),
+  client.readContract({ address: usdtAddress(), abi: erc20Abi, functionName: 'balanceOf', args: [safe] }),
   client.getStorageAt({ address: safe, slot: SAFE_GUARD_SLOT }),
  ]);
  const guard = guardSlot && BigInt(guardSlot) !== 0n ? getAddress(`0x${guardSlot.slice(-40)}`) : null;

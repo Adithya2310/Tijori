@@ -93,7 +93,8 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
  const ownerName = (address: string) => data.wallets.find(w => w.address === address.toLowerCase())?.name ?? short(address);
 
  return <>
-  <div className="portfolio"><div className="portfolio-main"><div className="portfolio-label">TREASURY BALANCE <span>✳</span></div><div className="portfolio-amount">{status?.balanceUsdt ?? '—'} <span>USDT</span></div>
+  <div className="portfolio"><div className="portfolio-main"><div className="portfolio-label">TREASURY BALANCE <span>✳</span></div><div className="portfolio-amount">{status?.balanceUsdt ?? '—'} <span>{status?.rehearsalToken ? 'rUSD' : 'USDT'}</span></div>
+   {status?.rehearsalToken && <p className="rehearsal-flag">REHEARSAL TOKEN: Tichori Rehearsal Dollar, not hackathon USDT. Payments in it do not qualify.</p>}
    <p>{status ? <>On Whitechain Sepolia · {status.threshold} of {status.owners.length} signers, together, to pay</> : 'Loading the vault from Whitechain…'}</p>
    <div className="portfolio-actions"><button onClick={() => { setError(''); setModal('propose'); }}><ArrowUpRight size={16} /> Propose payment</button><button onClick={() => { setError(''); setModal('inbox'); }}><FileText size={16} /> Invoice inbox</button></div></div>
    <div className="portfolio-art"><div className="portfolio-orbit"><ShieldCheck size={45} strokeWidth={1.2} /></div></div><div className="portfolio-note">WHITECHAIN</div></div>

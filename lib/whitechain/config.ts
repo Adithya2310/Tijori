@@ -4,7 +4,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { whitechainSepolia } from 'viem/chains';
 import { join } from 'node:path';
 import { IntegrationUnavailableError } from '../integrations/contracts.ts';
-import { WHITECHAIN_CHAIN_ID, WHITECHAIN_DEFAULT_RPC } from './chain.ts';
+import { WHITECHAIN_CHAIN_ID, WHITECHAIN_DEFAULT_RPC, WHITECHAIN_USDT } from './chain.ts';
 
 /** Server-only Whitechain configuration. Read at request time so one build can target any RPC. */
 export function whitechainRpcUrl() {
@@ -20,6 +20,18 @@ export function whitechainClient() {
  if (!client) { client = makeClient(url); clients.set(url, client); }
  return client;
 }
+/**
+ * The treasury asset. Always the hackathon USDT unless a rehearsal override is set explicitly.
+ * Payments in a self-minted token do NOT count for Whitechain qualification; the override exists
+ * only to rehearse the full flow on Whitechain Sepolia while waiting for real test USDT.
+ */
+export function usdtAddress() {
+ const override = process.env.TICHORI_REHEARSAL_TOKEN_ADDRESS?.trim();
+ if (!override) return WHITECHAIN_USDT;
+ if (!isAddress(override)) throw new IntegrationUnavailableError('TICHORI_REHEARSAL_TOKEN_ADDRESS is not a valid address.');
+ return getAddress(override);
+}
+export const isRehearsalToken = () => usdtAddress() !== WHITECHAIN_USDT;
 export async function assertWhitechain(client = whitechainClient()) {
  if (await client.getChainId() !== WHITECHAIN_CHAIN_ID) throw new Error('The Whitechain RPC is not on Whitechain Sepolia (1874).');
 }

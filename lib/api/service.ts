@@ -6,6 +6,7 @@ import { publicState, VaultError, type Vault } from '../vault.ts';
 import { normalizeOwners, prepareSafe, SAFE_CHAIN_ID, verifySafeDeployment, readSafeStatus } from '../safe.ts';
 import { providers } from '../integrations/providers.ts';
 import { readWhitechainSafe } from '../whitechain/safe.ts';
+import { isRehearsalToken } from '../whitechain/config.ts';
 import { formatUsdt } from '../whitechain/chain.ts';
 import { IntegrationUnavailableError } from '../integrations/contracts.ts';
 import { treasuryCapabilities } from './treasury.ts';
@@ -37,7 +38,7 @@ export async function balance(id: string | null) {
  if (safe.chainId === 1874) {
   try {
    const status = await readWhitechainSafe(safe.address);
-   return { address: status.address, chainId: status.chainId, owners: status.owners, threshold: status.threshold, nonce: status.nonce.toString(), guard: status.guard, balanceWei: status.balanceWei.toString(), balanceEth: formatEther(status.balanceWei), balanceUsdt: formatUsdt(status.balanceUsdt) };
+   return { address: status.address, chainId: status.chainId, owners: status.owners, threshold: status.threshold, nonce: status.nonce.toString(), guard: status.guard, balanceWei: status.balanceWei.toString(), balanceEth: formatEther(status.balanceWei), balanceUsdt: formatUsdt(status.balanceUsdt), rehearsalToken: isRehearsalToken() };
   } catch { throw new StorageError('Could not read the Safe on Whitechain Sepolia.'); }
  }
  try { const status = await readSafeStatus(safe.address); return { ...status, balanceEth: formatEther(BigInt(status.balanceWei)) }; }

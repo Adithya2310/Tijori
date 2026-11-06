@@ -87,6 +87,19 @@ Receipt: /invoice/[id] · webhook invoice.paid (HMAC) · GET /api/v1/treasury/ex
   - Transactions are journaled (fsync) before broadcast and are never resent automatically.
   - A leaked relayer key can only spend WBT. It cannot move vault funds without the owners' signatures *and* a verifier attestation.
 
+### Rehearsing without test USDT
+
+If you don't have the hackathon USDT yet, you can rehearse the full flow on Whitechain Sepolia with **Tichori Rehearsal Dollar (`rUSD`)**. It is a testnet-only token with open minting (`contracts/src/rehearsal/RehearsalUSD.sol`).
+
+1. Deploy it and mint to your vault:
+   ```bash
+   cd contracts && MINT_TO=<vault address> forge script script/DeployRehearsalUSD.s.sol \
+     --rpc-url whitechain_sepolia --account tichori-deployer --broadcast
+   ```
+2. Set `TICHORI_REHEARSAL_TOKEN_ADDRESS` in `.env`.
+
+While it's set, the vault shows a **REHEARSAL TOKEN** flag and `capabilities()` reports `qualifying: false`. **Payments in it do not count for the Whitechain tracks.** Unset it, then make the README payout with the official USDT.
+
 ### Tests
 
 - `forge test --root contracts`: 12 guard tests on the canonical Safe bytecode.

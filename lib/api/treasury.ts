@@ -7,8 +7,8 @@ import { applyAction, VaultError, type Vault } from '../vault.ts';
 import { providers, presenceProvider } from '../integrations/providers.ts';
 import { IntegrationUnavailableError } from '../integrations/contracts.ts';
 import { applicationState } from './domain.ts';
-import { WHITECHAIN_CHAIN_ID, WHITECHAIN_USDT, explorerTx, formatUsdt } from '../whitechain/chain.ts';
-import { isTreasuryConfigured, treasuryConfig, whitechainClient } from '../whitechain/config.ts';
+import { WHITECHAIN_CHAIN_ID, explorerTx, formatUsdt } from '../whitechain/chain.ts';
+import { isRehearsalToken, isTreasuryConfigured, treasuryConfig, usdtAddress, whitechainClient } from '../whitechain/config.ts';
 import { readWhitechainSafe } from '../whitechain/safe.ts';
 import { attestationTypedData, erc20Abi, guardAbi, idToBytes32, inboxKeyMessage, packSignatures, safeAbi, safeTxTypedData, sortAddresses, usdtTransferData, type SafeTx } from '../whitechain/safe-tx.ts';
 import { bumpDaily, deployGuardedSafe, reconcilePending, relay, withTreasury, type Session, type TreasuryJournal } from '../whitechain/relayer.ts';
@@ -52,7 +52,7 @@ async function arkivMutation<T>(action: string, body: unknown, opId: string, ide
 export function treasuryCapabilities() {
  let guard: string | null = null;
  try { guard = treasuryConfig().guard; } catch { /* unconfigured */ }
- return { chainId: WHITECHAIN_CHAIN_ID, asset: { symbol: 'USDT', address: WHITECHAIN_USDT, decimals: 6 }, configured: isTreasuryConfigured(), guard, presence: { provider: presenceProvider.id, mode: presenceProvider.mode }, execution: 'co-present-attested-relayer' };
+ return { chainId: WHITECHAIN_CHAIN_ID, asset: isRehearsalToken() ? { symbol: 'rUSD', address: usdtAddress(), decimals: 6, rehearsal: true, qualifying: false } : { symbol: 'USDT', address: usdtAddress(), decimals: 6, rehearsal: false, qualifying: true }, configured: isTreasuryConfigured(), guard, presence: { provider: presenceProvider.id, mode: presenceProvider.mode }, execution: 'co-present-attested-relayer' };
 }
 
 // ---------- Vault creation (gasless, guarded) ----------
@@ -118,10 +118,11 @@ export async function startApprovalSession(body: Record<string, unknown>) {
   if (!wallet.address || !live.owners.some(o => o.toLowerCase() === wallet.address)) throw new VaultError('Only current vault signers can start an approval session.');
   const amount = BigInt(proposal.amount), data = usdtTransferData(proposal.to as Address, amount);
   let inner: bigint;
-  try { inner = await client.estimateGas({ account: live.address, to: WHITECHAIN_USDT, data }); }
+  const token = usdtAddress();
+  try { inner = await client.estimateGas({ account: live.address, to: token, data }); }
   catch { throw new VaultError('The vault does not hold enough USDT for this payment.'); }
   const gasPrice = config.gasPriceMicroUsdt;
-  const safeTx: SafeTx = { to: WHITECHAIN_USDT, value: 0n, data, operation: 0, safeTxGas: inner * 13n / 10n + 10_000n, baseGas: config.baseGas, gasPrice, gasToken: gasPrice > 0n ? WHITECHAIN_USDT : zeroAddress, refundReceiver: gasPrice > 0n ? config.relayer.address : zeroAddress, nonce: live.nonce };
+  const safeTx: SafeTx = { to: token, value: 0n, data, operation: 0, safeTxGas: inner * 13n / 10n + 10_000n, baseGas: config.baseGas, gasPrice, gasToken: gasPrice > 0n ? token : zeroAddress, refundReceiver: gasPrice > 0n ? config.relayer.address : zeroAddress, nonce: live.nonce };
   if (live.balanceUsdt < amount + gasPrice * (safeTx.safeTxGas + safeTx.baseGas)) throw new VaultError('The vault does not hold enough USDT for this payment and its network fee.');
   const safeTxHash = hashTypedData(safeTxTypedData(WHITECHAIN_CHAIN_ID, live.address, safeTx));
   const onchain = await client.readContract({ address: live.address, abi: safeAbi, functionName: 'getTransactionHash', args: [safeTx.to, safeTx.value, safeTx.data, safeTx.operation, safeTx.safeTxGas, safeTx.baseGas, safeTx.gasPrice, safeTx.gasToken, safeTx.refundReceiver, safeTx.nonce] });
@@ -346,7 +347,7 @@ export async function relayerStatus() {
  if (!isTreasuryConfigured()) return { configured: false as const };
  const config = treasuryConfig(), client = whitechainClient();
  const journal = await withTreasury(async ctx => structuredClone(ctx.journal) as TreasuryJournal);
- const [balance, usdt] = await Promise.all([client.getBalance({ address: config.relayer.address }), client.readContract({ address: WHITECHAIN_USDT, abi: erc20Abi, functionName: 'balanceOf', args: [config.relayer.address] }).catch(() => 0n)]);
+ const [balance, usdt] = await Promise.all([client.getBalance({ address: config.relayer.address }), client.readContract({ address: usdtAddress(), abi: erc20Abi, functionName: 'balanceOf', args: [config.relayer.address] }).catch(() => 0n)]);
  const avg = journal.sent ? BigInt(journal.gasWei) / BigInt(journal.sent) : 1_500_000_000_000_000n;
  return {
   configured: true as const, address: config.relayer.address, guard: config.guard, verifier: config.verifier.address,

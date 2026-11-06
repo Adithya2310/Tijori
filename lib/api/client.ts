@@ -7,7 +7,7 @@ import type { listApprovalSessions, relayerStatus, startApprovalSession, issueIn
 export type ApplicationState = ReturnType<typeof applicationState> & {storageMode?:'local'|'arkiv';peers?:{id:string;name:string;address:string|null}[]};
 export type ApiTransaction = ApplicationState['transactions'][number];
 export type MutationResponse = ApplicationState & { identityId?: string; keyEnvelope?: KeyEnvelope };
-export type SafeStatus = { balanceEth: string; owners: string[]; threshold: number; chainId?: number; balanceUsdt?: string; guard?: string | null; nonce?: string };
+export type SafeStatus = { balanceEth: string; owners: string[]; threshold: number; chainId?: number; balanceUsdt?: string; guard?: string | null; nonce?: string; rehearsalToken?: boolean };
 export type PreparedVault = Omit<PendingSafe, 'version' | 'phase' | 'deploymentTxHash'> & { chainId: number; threshold: number; transaction: { to: string; data: string; value: string } };
 export type ApprovalSession = Awaited<ReturnType<typeof listApprovalSessions>>['sessions'][number];
 export type RelayerStatus = Awaited<ReturnType<typeof relayerStatus>>;
