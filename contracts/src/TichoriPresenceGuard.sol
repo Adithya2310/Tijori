@@ -246,7 +246,8 @@ contract TichoriPresenceGuard is ISafeGuard {
         returns (bool)
     {
         if (value != 0 || operation != Operation.Call || data.length != 36) return false;
-        bytes4 selector = bytes4(data);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes4 selector = bytes4(data); // reads the 4-byte selector of a 36-byte call
         return (to == safe && selector == SET_GUARD) || (to == address(this) && selector == this.setVerifier.selector);
     }
 
