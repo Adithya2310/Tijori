@@ -15,4 +15,7 @@ run(['run', 'build'], sdk);
 run(['pack', '--pack-destination', out, ...['core', 'server', 'client', 'react'].flatMap(name => ['-w', `@tijori/${name}`])], sdk);
 const tarballs = readdirSync(out).filter(file => file.endsWith('.tgz')).map(file => join(out, file));
 run(['install', '--no-save', ...tarballs], root);
-console.log(`\nThe app now uses your local SDK build (${tarballs.length} packages). Run \`npm ci\` to go back to the published versions.`);
+// Turbopack's dev cache does not notice packages replaced under node_modules and can then reload the page in an
+// endless loop ("HMR hash mismatch"). Clear it (it is rebuilt on the next `npm run dev`); restart a running dev server.
+rmSync(join(root, '.next', 'dev'), { recursive: true, force: true });
+console.log(`\nThe app now uses your local SDK build (${tarballs.length} packages). Restart \`npm run dev\` if it is running. Run \`npm ci\` to go back to the published versions.`);
