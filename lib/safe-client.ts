@@ -1,7 +1,8 @@
 'use client';
 import { createPublicClient, custom, getAddress, type Hex } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { normalizeOwners, prepareSafe, SAFE_CHAIN_ID } from './safe.ts';
+import { tichori } from './api/client.ts';
+const SAFE_CHAIN_ID = 84532;
 
 type Provider = { request(args: { method: string; params?: readonly unknown[] | object }): Promise<unknown> };
 declare global { interface Window { ethereum?: Provider } }
@@ -10,6 +11,35 @@ export const PENDING_SAFE_KEY = 'tichori-pending-safe-v1';
 export function readPendingSafe(): PendingSafe | null {
  const raw=localStorage.getItem(PENDING_SAFE_KEY); if(raw===null)return null;
  try { const value = JSON.parse(raw); if (!value || value.version !== 1 || typeof value.name !== 'string' || typeof value.creatorId !== 'string' || !Array.isArray(value.owners) || typeof value.address !== 'string' || !['awaiting-wallet', 'submitted'].includes(value.phase)) throw Error(); return value; } catch { throw new Error('Pending deployment record is invalid. Preserve it and reconcile before creating another vault.'); }
+}
+/** Request the user's wallet approval; never continue on an unverified network. */
+export async function ensureBaseSepolia(provider: Provider): Promise<void> {
+ if (Number(await provider.request({ method: 'eth_chainId' })) === SAFE_CHAIN_ID) return;
+ const chainId = `0x${SAFE_CHAIN_ID.toString(16)}`;
+ try {
+  try {
+   await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId }] });
+  } catch (error) {
+   if ((error as { code?: number })?.code !== 4902) throw error;
+   await provider.request({ method: 'wallet_addEthereumChain', params: [{
+    chainId, chainName: baseSepolia.name, nativeCurrency: baseSepolia.nativeCurrency,
+    rpcUrls: [baseSepolia.rpcUrls.default.http[0]],
+    blockExplorerUrls: [baseSepolia.blockExplorers.default.url],
+   }] });
+   // Adding a network does not necessarily select it.
+   if (Number(await provider.request({ method: 'eth_chainId' })) !== SAFE_CHAIN_ID) {
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId }] });
+   }
+  }
+ } catch (error) {
+  const code = (error as { code?: number })?.code;
+  if (code === 4001) throw new Error('Network switch was declined. Select Base Sepolia in your wallet, then try again.');
+  if (code === -32002) throw new Error('A wallet request is already open. Complete it in your wallet, then try again.');
+  throw new Error('Could not switch networks. Select Base Sepolia (chain ID 84532) in your wallet, then try again.');
+ }
+ if (Number(await provider.request({ method: 'eth_chainId' })) !== SAFE_CHAIN_ID) {
+  throw new Error('Your wallet is still on another network. Select Base Sepolia (chain ID 84532), then try again.');
+ }
 }
 export async function deploySafe(name: string, creatorId: string, additionalOwners: string[]): Promise<PendingSafe> {
  if (!navigator.locks) throw new Error('This browser does not support safe deployment coordination.');
@@ -21,13 +51,12 @@ export async function deploySafe(name: string, creatorId: string, additionalOwne
  const accounts = await provider.request({ method: 'eth_requestAccounts' });
  if (!Array.isArray(accounts) || typeof accounts[0] !== 'string') throw new Error('Choose a wallet account to create the vault.');
  const creator = getAddress(accounts[0]);
- const chain = Number(await provider.request({ method: 'eth_chainId' }));
- if (chain !== SAFE_CHAIN_ID) throw new Error('Switch your wallet to Base Sepolia and try again.');
- const owners = normalizeOwners([creator, ...additionalOwners]);
- const saltNonce = BigInt(`0x${Array.from(crypto.getRandomValues(new Uint8Array(16)), v => v.toString(16).padStart(2, '0')).join('')}`).toString();
- const kit = await prepareSafe(owners, saltNonce, provider);
- const address = getAddress(await kit.getAddress());
- const tx = await kit.createSafeDeploymentTransaction();
+ await ensureBaseSepolia(provider);
+ const plan = await tichori.prepareVault(name, creatorId, [creator, ...additionalOwners]);
+ if (plan.chainId !== SAFE_CHAIN_ID || getAddress(plan.owners[0]) !== creator) throw new Error('The deployment plan does not match this wallet.');
+ const { owners, saltNonce } = plan;
+ const address = getAddress(plan.address);
+ const tx = plan.transaction;
  const reader = createPublicClient({ chain: baseSepolia, transport: custom(provider, { retryCount: 0 }) });
  if (await reader.getBytecode({ address })) throw new Error('The predicted Safe is already deployed. Reconcile before proceeding.');
  if (Number(await provider.request({ method: 'eth_chainId' })) !== SAFE_CHAIN_ID) throw new Error('The wallet network changed.');
@@ -49,8 +78,9 @@ export async function deploySafe(name: string, creatorId: string, additionalOwne
 }
 export async function waitForSafe(pending: PendingSafe): Promise<void> {
  const provider = window.ethereum;
- if (!provider || Number(await provider.request({ method: 'eth_chainId' })) !== SAFE_CHAIN_ID) throw new Error('Connect your wallet to Base Sepolia to check the deployment.');
+ if (!provider) throw new Error('Connect your wallet to check the deployment.');
  if (!pending.deploymentTxHash) throw new Error('The deployment hash is missing. Find it in your wallet and enter it to resume.');
+ await ensureBaseSepolia(provider);
  const reader = createPublicClient({ chain: baseSepolia, transport: custom(provider, { retryCount: 0 }) });
  const receipt = await reader.waitForTransactionReceipt({ hash: pending.deploymentTxHash, timeout: 90000, pollingInterval: 2000 });
  if (receipt.status !== 'success') throw new Error('The Safe deployment reverted. Reconcile the pending transaction before continuing.');

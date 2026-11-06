@@ -4,6 +4,12 @@ A local prototype for demo identities and shared vaults. New vaults are Safe mul
 
 Identity matching, object scans, microphone listening and proximity remain simulations. Existing demo vaults and their requests remain simulated. New Safe vaults have real testnet contracts and signer-enforced thresholds; their transactions are handled in the Safe app, not by the demo approval flow. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
 
+## Reusable API and integration hooks
+
+The frontend uses `/api/v1/*` through a typed HTTP client. The server owns request discovery, approval eligibility, quorum presentation and Safe deployment preparation, with replaceable server providers for object matching, physical approvals and external-vault verification. Existing unversioned endpoints remain compatible. Object matching and physical providers are still simulations; external-vault verification returns HTTP 501 until an adapter is implemented. Browser encryption and user wallet signing remain on the device.
+
+See [the API integration guide](docs/API.md) for endpoint payloads, provider contracts, teammate wiring locations and the boundaries of this local scaffold. This does not add public API authentication, multi-application isolation or on-chain physical approval enforcement.
+
 ## Run locally
 
 Requires Node.js 22.20+ and a persistent writable filesystem. Bind the demo to localhost; this API has no real authentication or per-user spending authorization and must not be exposed publicly.
