@@ -1,15 +1,18 @@
 'use client';
 import { useEffect, useState } from 'react';
-import ObjectCapture from './ObjectCapture';
+import ObjectCapture from './ObjectCapture.tsx';
+import { useTijori } from '../context.tsx';
 import { packObjectProfile, unpackObjectProfile, type ObjectProfile } from '@tijori/core/object-profile';
 import { type DinoFeatures } from '@tijori/core/dino';
 import { createObjectIdentity, downloadObjectRecovery, parseObjectRecovery, verifyObjectRecovery, DINO_OBJECT_NAME, type ObjectRecovery } from '@tijori/client';
 import { listDeviceIdentities, listServerIdentities, saveDeviceIdentity, type DeviceIdentity } from '@tijori/client';
 
+/** Object sign-up or sign-in: capture, on-device match and the remembered (insecure demo) identity. */
 export default function ObjectIdentityForm({ mode, busy, onSubmit, onWorking }: {
  mode: 'signup' | 'login'; busy: boolean; onWorking: (value: boolean) => void;
  onSubmit: (body: { name?: string; address: string; objectName: string; objectProfile?:ObjectProfile; keyEnvelope?: ObjectRecovery['keyEnvelope'] }, recovery: ObjectRecovery) => Promise<boolean>;
 }) {
+ const { client } = useTijori();
  const [name, setName] = useState(''), [features, setFeatures] = useState<DinoFeatures | null>(null);
  const [identities, setIdentities] = useState<DeviceIdentity[]>([]), [selected, setSelected] = useState('');
  const [ready, setReady] = useState(false), [working, setWorking] = useState(false), [error, setError] = useState('');
@@ -18,7 +21,7 @@ export default function ObjectIdentityForm({ mode, busy, onSubmit, onWorking }: 
  const remembered = identities.find(item => item.recovery.address === selected);
  useEffect(() => {
   let live = true;
-  Promise.all([listDeviceIdentities(),listServerIdentities()]).then(([local,server]) => {
+  Promise.all([listDeviceIdentities(),listServerIdentities(client)]).then(([local,server]) => {
    const records=[...server,...local.filter(item=>!server.some(saved=>saved.recovery.address===item.recovery.address))];
    if (!live) return;
    setIdentities(records);
@@ -27,7 +30,7 @@ export default function ObjectIdentityForm({ mode, busy, onSubmit, onWorking }: 
    setReady(true);
   }).catch(e => { if (live) setError(e instanceof Error ? e.message : 'Could not read saved identities.'); });
   return () => { live = false; };
- }, [mode]);
+ }, [mode, client]);
  async function submit() {
   if (disabled || !ready || !features || (mode === 'signup' ? !name.trim() : !remembered)) return;
   setWorking(true); onWorking(true); setError(''); setResult('');
@@ -64,16 +67,16 @@ export default function ObjectIdentityForm({ mode, busy, onSubmit, onWorking }: 
   } catch (e) { setError(e instanceof Error ? e.message : 'Could not restore the backup.'); }
   finally { setWorking(false); onWorking(false); }
  }
- return <fieldset className="object-identity-form" disabled={disabled}>
-  <div className="scene-steps"><span className="scene-step">1 · {mode === 'signup' ? 'Your identity' : 'Remembered identity'}</span><span className="scene-step">2 · Show your object</span><span className="scene-step">3 · {mode === 'signup' ? 'Register' : 'Match & enter'}</span></div>
-  <p className="form-hint">{mode === 'signup' ? 'Open the camera and photograph an object you can show again. Tap to isolate it. Its compact reference is saved to server storage—no recovery file needed for everyday login.' : 'Show the same object you registered. Your reference is retrieved from server storage (Arkiv when enabled).'}</p>
-  {mode === 'signup' ? <label>Your name<input value={name} onChange={e => setName(e.target.value)} maxLength={120} autoComplete="name"/></label> : identities.length > 0 ? <label>Your registered identity<select value={selected} onChange={e => { setSelected(e.target.value); setResult(''); setError(''); }}>{identities.map(item => <option key={item.recovery.address} value={item.recovery.address}>{item.name} · {item.recovery.address.slice(0, 10)}…</option>)}</select></label> : ready ? <p className="notice">No object identity is registered on this server yet. Create one here, or restore an older browser-only identity below.</p> : <p role="status">Loading saved identities…</p>}
-  {mode === 'signup' && remembered && <p className="notice">Resuming your saved signup for {remembered.name}. Show the same object to continue.</p>}
+ return <fieldset className="tj-object-identity-form" disabled={disabled}>
+  <div className="tj-scene-steps"><span className="tj-scene-step">1 · {mode === 'signup' ? 'Your identity' : 'Remembered identity'}</span><span className="tj-scene-step">2 · Show your object</span><span className="tj-scene-step">3 · {mode === 'signup' ? 'Register' : 'Match & enter'}</span></div>
+  <p className="tj-form-hint">{mode === 'signup' ? 'Open the camera and photograph an object you can show again. Tap to isolate it. Its compact reference is saved to server storage—no recovery file needed for everyday login.' : 'Show the same object you registered. Your reference is retrieved from server storage (Arkiv when enabled).'}</p>
+  {mode === 'signup' ? <label>Your name<input value={name} onChange={e => setName(e.target.value)} maxLength={120} autoComplete="name"/></label> : identities.length > 0 ? <label>Your registered identity<select value={selected} onChange={e => { setSelected(e.target.value); setResult(''); setError(''); }}>{identities.map(item => <option key={item.recovery.address} value={item.recovery.address}>{item.name} · {item.recovery.address.slice(0, 10)}…</option>)}</select></label> : ready ? <p className="tj-notice">No object identity is registered on this server yet. Create one here, or restore an older browser-only identity below.</p> : <p role="status">Loading saved identities…</p>}
+  {mode === 'signup' && remembered && <p className="tj-notice">Resuming your saved signup for {remembered.name}. Show the same object to continue.</p>}
   <ObjectCapture isolate={mode==='signup'||!!remembered?.recovery.objectProfile} autoProcess disabled={disabled || !ready || (mode === 'login' && !remembered)} onFeatures={value => { setFeatures(value); setError(''); setResult(''); }}/>
-  {result && <p className="notice" role="status">{result}</p>}
-  {error && <div className="error" role="alert">{error}</div>}
-  <button type="button" className="submit" disabled={disabled || !ready || !features || (mode === 'signup' ? !name.trim() : !remembered)} onClick={() => void submit()}>{working ? 'Checking your object…' : mode === 'signup' ? 'Register object & create identity' : 'Match object & log in'}</button>
-  <p className="form-hint">Demo only: saved server/browser data can unlock this identity without a photo. Photos are discarded; compact features and the encrypted identity are stored on the server and cached in this browser. Arkiv-backed identities can be retrieved on another device. Older browser-only identities still need their optional backup. Safe still uses your connected wallet.</p>
-  <details className="identity-backup"><summary>Optional backup / move an existing identity</summary><p className="form-hint">Use once when moving browsers or restoring an older user. Normal login only needs your object. This backup also contains everything needed to bypass the photo check.</p>{remembered && <button type="button" className="light-btn" onClick={() => downloadObjectRecovery(remembered.recovery)}>Download optional backup</button>}<label>Restore an existing backup<input type="file" accept="application/json,.json" onChange={event => { const file = event.target.files?.[0]; if (file) void restore(file); event.target.value = ''; }}/></label></details>
+  {result && <p className="tj-notice" role="status">{result}</p>}
+  {error && <div className="tj-error" role="alert">{error}</div>}
+  <button type="button" className="tj-submit" disabled={disabled || !ready || !features || (mode === 'signup' ? !name.trim() : !remembered)} onClick={() => void submit()}>{working ? 'Checking your object…' : mode === 'signup' ? 'Register object & create identity' : 'Match object & log in'}</button>
+  <p className="tj-form-hint">Demo only: saved server/browser data can unlock this identity without a photo. Photos are discarded; compact features and the encrypted identity are stored on the server and cached in this browser. Arkiv-backed identities can be retrieved on another device. Older browser-only identities still need their optional backup. Safe still uses your connected wallet.</p>
+  <details className="tj-identity-backup"><summary>Optional backup / move an existing identity</summary><p className="tj-form-hint">Use once when moving browsers or restoring an older user. Normal login only needs your object. This backup also contains everything needed to bypass the photo check.</p>{remembered && <button type="button" className="tj-light-btn" onClick={() => downloadObjectRecovery(remembered.recovery)}>Download optional backup</button>}<label>Restore an existing backup<input type="file" accept="application/json,.json" onChange={event => { const file = event.target.files?.[0]; if (file) void restore(file); event.target.value = ''; }}/></label></details>
  </fieldset>;
 }

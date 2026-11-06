@@ -2,14 +2,17 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { AudioLines, Radio, X } from 'lucide-react';
 
-import { createTijoriClient, loadAcousticModem, type AcousticModem, type ProximitySessionView } from '@tijori/client';
+import { loadAcousticModem, type AcousticModem, type ProximitySessionView } from '@tijori/client';
+import { useTijori } from '../context.tsx';
 import { LEGACY_PROXIMITY_SESSION_PREFIX } from '@tijori/core/legacy';
 
 type Group = {id:string;name:string;members:{id:string;name:string}[]};
 type Session = ProximitySessionView;
 type Modem = AcousticModem;
-const proximity = createTijoriClient().proximity;
-export default function ProximityCheck({group,walletId,storageMode}:{group:Group;walletId:string;storageMode?:string}) {
+/** Acoustic proof of attendance for a vault or group: broadcast a two-minute challenge or join one by microphone. */
+export default function ProximityCheck({group,walletId,storageMode:storageModeProp}:{group:Group;walletId:string;storageMode?:string}) {
+ const { client, data } = useTijori();
+ const proximity = client.proximity, storageMode = storageModeProp ?? data.storageMode;
  const headingId=useId();
  const audioHintId=useId();
  const [ultrasound,setUltrasound]=useState(false);
@@ -32,7 +35,7 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
   }
   void refresh();const clock=setInterval(()=>setNow(Date.now()),1000);
   return ()=>{disposed=true;controller.abort();clearTimeout(timer);clearInterval(clock);if(running.current){generationRef.current++;running.current=false;modem.current?.stopChallengeTone();modem.current?.stopAcousticListener();}const id=hostSession.current;if(id)void proximity.cancel(group.id,walletId,id,{keepalive:true}).catch(()=>{});};
- },[group.id,walletId]);
+ },[group.id,walletId,proximity]);
  const active=session?.status==='active' && session.expiresAt>now;
  const ownMatch=session?.matches.find(m=>m.walletId===walletId);
  const ended=!!session && (!active || !!ownMatch);
@@ -96,25 +99,25 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
   }
  }
  const seconds=session?Math.max(0,Math.ceil((session.expiresAt-now)/1000)):0;
- return <div className="proximity-check">
-  <p className="check-status" aria-live="polite">{active?`Acoustic check active · ${seconds}s left`:session?.status==='cancelled'?'Last check ended':session?'Last check expired':'Ready for an acoustic check'}</p>
-  {session && session.matches.length>0 && <p className="check-status">{session.matches.length} of {group.members.length-1} other members matched</p>}
-  <label className="object-consent"><input type="checkbox" role="switch" checked={ultrasound} disabled={opened} aria-describedby={audioHintId} onChange={e=>setUltrasound(e.target.checked)}/><span>Ultrasound broadcast {ultrasound?'on':'off'}</span></label>
-  <p className="form-hint" id={audioHintId}>{ultrasound?'Send uses high-frequency audio (about 15–19.5 kHz). Some people may still hear it; speaker and microphone support varies.':'Send uses an audible signal for easier testing.'} Listeners detect both modes automatically. Stop and close a check before switching modes. Use device speakers, without headphones.</p>
-  <div className="group-actions"><button disabled={(!!active && session?.hostId!==walletId) || mode!=='idle' || !audioReady} onClick={e=>void begin('host',e.currentTarget)}>{active&&session?.hostId===walletId?'Resume signal':'Send'} <Radio size={14}/></button><button disabled={mode!=='idle' || !audioReady || !active || session?.hostId===walletId || !!ownMatch} onClick={e=>void begin('listener',e.currentTarget)}>{ownMatch&&active?'Matched':'Join check'} <AudioLines size={14}/></button></div>
-  {(error||connectionError)&&!opened&&<p className="error" role="alert">{error||connectionError}</p>}
-  <dialog ref={dialog} className="modal proximity-dialog" aria-labelledby={headingId} onCancel={e=>{e.preventDefault();void close();}}>
-   <button className="modal-close" onClick={()=>void close()} aria-label="Close acoustic check"><X size={19}/></button>
-   <div className="modal-icon"><Radio/></div><div className="section-kicker">GROUP PROXIMITY</div><h2 id={headingId}>{group.name}</h2>
-   <p className="modal-desc">{session?.hostId===walletId?`Your device plays ${ultrasound?'a high-frequency ultrasound':'an audible'} signal. Ask other members to open this vault and tap Join check.`:'Listen near the broadcasting device. Audible and ultrasound signals are detected automatically. Keep this screen open and allow microphone access.'}</p>
-   <p className="check-status">{session?.hostId===walletId?`Broadcast mode: ${ultrasound?'Ultrasound · about 15–19.5 kHz':'Audible'}`:'Receive mode: automatic · audible + ultrasound'}</p>
-   <div className="dial-wrap"><div className="dial"><div className="dial-inner"><AudioLines size={27}/><strong className="dial-listening">{ownMatch?'Signal matched':ended?'Check ended':mode==='starting'?'Starting…':mode==='permission'?'Allow microphone':mode==='broadcasting'?'Broadcasting':mode==='listening'?'Listening':'Ready'}</strong><small>{active?`${seconds}s remaining`:'ACOUSTIC CHECK'}</small></div></div></div>
+ return <div className="tj-proximity-check">
+  <p className="tj-check-status" aria-live="polite">{active?`Acoustic check active · ${seconds}s left`:session?.status==='cancelled'?'Last check ended':session?'Last check expired':'Ready for an acoustic check'}</p>
+  {session && session.matches.length>0 && <p className="tj-check-status">{session.matches.length} of {group.members.length-1} other members matched</p>}
+  <label className="tj-object-consent"><input type="checkbox" role="switch" checked={ultrasound} disabled={opened} aria-describedby={audioHintId} onChange={e=>setUltrasound(e.target.checked)}/><span>Ultrasound broadcast {ultrasound?'on':'off'}</span></label>
+  <p className="tj-form-hint" id={audioHintId}>{ultrasound?'Send uses high-frequency audio (about 15–19.5 kHz). Some people may still hear it; speaker and microphone support varies.':'Send uses an audible signal for easier testing.'} Listeners detect both modes automatically. Stop and close a check before switching modes. Use device speakers, without headphones.</p>
+  <div className="tj-group-actions"><button disabled={(!!active && session?.hostId!==walletId) || mode!=='idle' || !audioReady} onClick={e=>void begin('host',e.currentTarget)}>{active&&session?.hostId===walletId?'Resume signal':'Send'} <Radio size={14}/></button><button disabled={mode!=='idle' || !audioReady || !active || session?.hostId===walletId || !!ownMatch} onClick={e=>void begin('listener',e.currentTarget)}>{ownMatch&&active?'Matched':'Join check'} <AudioLines size={14}/></button></div>
+  {(error||connectionError)&&!opened&&<p className="tj-error" role="alert">{error||connectionError}</p>}
+  <dialog ref={dialog} className="tj-modal tj-proximity-dialog" aria-labelledby={headingId} onCancel={e=>{e.preventDefault();void close();}}>
+   <button className="tj-modal-close" onClick={()=>void close()} aria-label="Close acoustic check"><X size={19}/></button>
+   <div className="tj-modal-icon"><Radio/></div><div className="tj-section-kicker">GROUP PROXIMITY</div><h2 id={headingId}>{group.name}</h2>
+   <p className="tj-modal-desc">{session?.hostId===walletId?`Your device plays ${ultrasound?'a high-frequency ultrasound':'an audible'} signal. Ask other members to open this vault and tap Join check.`:'Listen near the broadcasting device. Audible and ultrasound signals are detected automatically. Keep this screen open and allow microphone access.'}</p>
+   <p className="tj-check-status">{session?.hostId===walletId?`Broadcast mode: ${ultrasound?'Ultrasound · about 15–19.5 kHz':'Audible'}`:'Receive mode: automatic · audible + ultrasound'}</p>
+   <div className="tj-dial-wrap"><div className="tj-dial"><div className="tj-dial-inner"><AudioLines size={27}/><strong className="tj-dial-listening">{ownMatch?'Signal matched':ended?'Check ended':mode==='starting'?'Starting…':mode==='permission'?'Allow microphone':mode==='broadcasting'?'Broadcasting':mode==='listening'?'Listening':'Ready'}</strong><small>{active?`${seconds}s remaining`:'ACOUSTIC CHECK'}</small></div></div></div>
    {mode==='listening'&&!ended&&<label>Microphone level<meter min="0" max="100" value={level} aria-label="Microphone level"/></label>}
-   <div className="signal-banner"><Radio size={20}/><div><strong>Acoustic matching only · No transfers</strong><small>Audio stays on your device. Decoded challenges and matches are stored in {storageMode==='local'?'the laptop’s encrypted local database. No Arkiv writes are made.':'encrypted Arkiv state. Public storage metadata remains visible.'} A match can be replayed or relayed and does not guarantee physical proximity or verify identity.</small></div></div>
-   <ul className="check-members">{group.members.map(m=><li key={m.id}><span>{m.name}</span><span>{session?.hostId===m.id?'Broadcaster':session?.matches.some(v=>v.walletId===m.id)?'Signal matched':'Waiting to join'}</span></li>)}</ul>
-   {ownMatch&&<p className="form-hint">Matched at {new Date(ownMatch.verifiedAt).toLocaleTimeString()}. Recorded for this check only.</p>}
-   {(error||connectionError)&&<div className="error" role="alert">{error||connectionError}</div>}
-   <button className="submit" onClick={()=>void close()}>{session?.hostId===walletId?'Stop and close':'Close check'}</button>
+   <div className="tj-signal-banner"><Radio size={20}/><div><strong>Acoustic matching only · No transfers</strong><small>Audio stays on your device. Decoded challenges and matches are stored in {storageMode==='local'?'the laptop’s encrypted local database. No Arkiv writes are made.':'encrypted Arkiv state. Public storage metadata remains visible.'} A match can be replayed or relayed and does not guarantee physical proximity or verify identity.</small></div></div>
+   <ul className="tj-check-members">{group.members.map(m=><li key={m.id}><span>{m.name}</span><span>{session?.hostId===m.id?'Broadcaster':session?.matches.some(v=>v.walletId===m.id)?'Signal matched':'Waiting to join'}</span></li>)}</ul>
+   {ownMatch&&<p className="tj-form-hint">Matched at {new Date(ownMatch.verifiedAt).toLocaleTimeString()}. Recorded for this check only.</p>}
+   {(error||connectionError)&&<div className="tj-error" role="alert">{error||connectionError}</div>}
+   <button className="tj-submit" onClick={()=>void close()}>{session?.hostId===walletId?'Stop and close':'Close check'}</button>
   </dialog>
  </div>;
 }

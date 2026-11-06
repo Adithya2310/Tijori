@@ -44,7 +44,7 @@ Receipt: /invoice/[id] · webhook invoice.paid (HMAC) · GET /api/v1/treasury/ex
 - `contracts/`: the Foundry project, with `TichoriPresenceGuard`, `TichoriSafeSetup` and tests against the canonical Safe 1.4.1 bytecode read from Whitechain.
 - `packages/core/src/whitechain/`: chain constants, EIP-712 helpers and the pure treasury domain. `packages/server/src/whitechain/`: the relayer (journaled, never resends), config and keys.
 - `packages/server/src/services/treasury.ts`: the service behind the `/api/v1` routes.
-- `app/treasury-panel.tsx`: the UI.
+- `packages/react/src/components/VaultTreasury.tsx`: the UI (`<VaultTreasury vaultId/>` from `@tijori/react`).
 - `packages/tichori-invoices`: the vendor SDK.
 - `examples/vendor-studio`: a separate vendor app, where the integration is about 20 lines.
 
@@ -120,7 +120,7 @@ No testnet funds are spent by tests.
 
 - **Simulated checks:** object matching and the ultrasonic presence check are **simulated providers** in this repo.
   - The real implementations plug into `ObjectMatchingProvider` and `PresenceSessionProvider` (`packages/core/src/integrations.ts`; pass replacements as `createTijoriServer({ providers })`).
-  - The UI emits `tichori:presence-emit` and calls `window.tichoriPresence.listen()` when present.
+  - The UI calls `<TijoriProvider onPresenceEmit>` and emits `tijori:presence-emit` (plus the deprecated `tichori:presence-emit`). Approvers use `<TijoriProvider presence>` or `window.tijoriPresence.listen()` (`window.tichoriPresence` still works).
   - Frequency matching alone does not prove proximity: relay and replay must be handled by the real provider.
 - **Simulated room code is visible to members:** in simulated presence mode, members' session listings include the room code so the flow can be demonstrated without audio. In live mode only the initiator's device receives it.
 - **What a majority can still do:** the guard does not restrict *what* a co-present, attested majority approves. The server only builds USDT payouts, but the Safe would accept any attested transaction the owners sign, including adding modules. Safe 1.4.1 module transactions are not checked by transaction guards.

@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/** Live camera preview and capture. Photos are taken fresh; gallery uploads are intentionally unsupported. */
 export default function CameraCapture({ onStart, onCapture }: { onStart: () => void; onCapture: (photo: Blob) => void }) {
  const video = useRef<HTMLVideoElement>(null), stream = useRef<MediaStream | null>(null), generation = useRef(0);
  const [state, setState] = useState<'idle' | 'opening' | 'live' | 'capturing'>('idle');
@@ -45,9 +46,9 @@ export default function CameraCapture({ onStart, onCapture }: { onStart: () => v
    close(); onCapture(photo);
   } catch (e) { if (attempt === generation.current) { setState('live'); setError(e instanceof Error ? e.message : 'Could not capture the photo.'); } }
  }
- return <div className="camera-capture">
-  <video ref={video} autoPlay muted playsInline hidden={state === 'idle'} className="object-preview" aria-label="Live object camera preview"/>
-  {state === 'idle' ? <button type="button" className="light-btn" onClick={() => void open()}>Open camera</button> : <div className="camera-actions"><button type="button" className="primary" disabled={state !== 'live'} onClick={() => void capture()}>{state === 'opening' ? 'Opening camera…' : state === 'capturing' ? 'Taking photo…' : 'Take photo'}</button><button type="button" className="light-btn" onClick={close}>Close camera</button></div>}
-  {error && <p className="error" role="alert">{error}</p>}
+ return <div className="tj-camera-capture">
+  <video ref={video} autoPlay muted playsInline hidden={state === 'idle'} className="tj-object-preview" aria-label="Live object camera preview"/>
+  {state === 'idle' ? <button type="button" className="tj-light-btn" onClick={() => void open()}>Open camera</button> : <div className="tj-camera-actions"><button type="button" className="tj-primary" disabled={state !== 'live'} onClick={() => void capture()}>{state === 'opening' ? 'Opening camera…' : state === 'capturing' ? 'Taking photo…' : 'Take photo'}</button><button type="button" className="tj-light-btn" onClick={close}>Close camera</button></div>}
+  {error && <p className="tj-error" role="alert">{error}</p>}
  </div>;
 }

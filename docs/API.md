@@ -133,8 +133,8 @@ Guarded Safe vaults on Whitechain Sepolia (chain 1874). These endpoints share th
 By default, non-public destinations are refused. That covers loopback, private, link-local, CGNAT, ULA, IPv4-mapped and reserved addresses. They are refused at invoice creation for IP literals and local names, and again after DNS resolution at every delivery. A residual DNS-rebinding window remains between that check and the connection. `TICHORI_WEBHOOK_ALLOW_PRIVATE=1` allows local destinations for the local vendor example.
 
 **Presence provider:** implement `PresenceSessionProvider` (`createChallenge`, `verify`) and pass it as `createTijoriServer({ providers: { presence } })`.
-- In the browser, the initiator's page dispatches `tichori:presence-emit` with `{ challengeId, code, expiresAt }` for the emitter.
-- Approvers' pages call `window.tichoriPresence.listen(challengeId)`, which resolves with the heard code.
+- In the browser, the initiator's page calls `<TijoriProvider onPresenceEmit>` and dispatches `tijori:presence-emit` (and the deprecated `tichori:presence-emit`) with `{ challengeId, code, expiresAt }` for the emitter.
+- Approvers' pages call the `presence` listener passed to `<TijoriProvider>` (or `window.tijoriPresence`, falling back to the deprecated `window.tichoriPresence`); `listen(challengeId)` resolves with the heard code.
 - The provider must reject relayed, replayed and stale evidence.
 
 **On-chain enforcement:** `TichoriPresenceGuard` blocks every Safe execution except attested ones, and the threshold signers must be the attested approvers. The unanimous-owner escape hatch can only remove the guard or rotate the verifier.
