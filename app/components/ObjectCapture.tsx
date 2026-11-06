@@ -71,10 +71,9 @@ export default function ObjectCapture({ disabled, onFeatures, autoProcess = fals
   } catch (error) { void fallback(error instanceof Error ? error.message : 'This browser could not create a worker'); }
  }
  return <fieldset className="object-capture" disabled={disabled}>
-  <legend>Personal object · DINOv2</legend>
+  <legend>Your personal object</legend>
   <p className="form-hint">Use a tightly framed photo in good light. Photos can be replayed; this experimental match does not prove ownership or identity.</p>
-  <label className="object-consent"><input type="checkbox" checked={consent} onChange={event => { reset(); setConsent(event.target.checked); }}/><span>Process my photo on this device. Load the model from this app; my photo stays in this browser.</span></label>
-  <p className="form-hint">Take a fresh photo with your camera. Gallery selection and image-file uploads are not available.</p>
+  <label className="object-consent"><input type="checkbox" checked={consent} onChange={event => { reset(); setConsent(event.target.checked); }}/><span>I agree to process my photo on this device. My original photo stays in this browser.</span></label>
   {consent && !disabled && !running && <CameraCapture onStart={() => { reset(); setImage(null); setPreview(''); }} onCapture={photo => {
    setImage(photo); setPreview(URL.createObjectURL(photo));
    if (autoProcess && !isolate) process(photo);

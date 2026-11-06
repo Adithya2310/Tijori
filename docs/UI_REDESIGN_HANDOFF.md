@@ -6,7 +6,7 @@
 
 Do not merge this branch wholesale, cherry-pick its history wholesale, replace the destination application controller, or import its older backend merely to obtain the design. Rebuild or selectively adapt the presentation around the destination's existing props, callbacks, state, validation, routes, and lifecycle. A visual redesign is not permission to change product behavior.
 
-This document records the local redesign reviewed on 2026-11-07 against branch base `08e682c`. The documentation commit does not commit the existing UI working files. At handoff, several design components and route files were still untracked and other UI edits were uncommitted. Check `git status` and the actual source revision before using this guide from another checkout: **a pushed documentation commit alone does not contain the visual implementation**. Preserve that work separately before changing or cleaning this checkout; never reset, clean, or drop stashes to prepare a port.
+This document records the redesign reviewed on 2026-11-07 against branch base `08e682c`. The initial documentation-only commit (`31cee51`) did not include the visual implementation; the subsequent UI snapshot commit includes the landing page, guided signup/login presentation, shared branding, visual components, and preview route scaffolding. Local feedback tooling and generated files are excluded. The snapshot contains mixed UI/controller files for previewing this older app, so its presence in Git is **not permission to merge its functionality into another branch**. Follow the selective source map below. Check `git status` before changing this checkout; never reset, clean, or drop stashes to prepare a port.
 
 ## Visual direction to retain
 

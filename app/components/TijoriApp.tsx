@@ -1,0 +1,184 @@
+'use client';
+import { useEffect, useRef, useState } from 'react';
+import Brand from './Brand';
+import ProximityCheck from './ProximityCheck';
+import PhoneAccess from './PhoneAccess';
+import ObjectIdentityForm from './ObjectIdentityForm';
+import FlowPanel from './FlowPanel';
+import JourneyIntro from './JourneyIntro';
+import AuthAtmosphere from './AuthAtmosphere';
+import { listServerIdentities } from '@/lib/device-identities';
+import type { ObjectProfile } from '@/lib/object-profile';
+import { listDeviceIdentities } from '@/lib/device-identities';
+import { unlockObjectIdentity, type ObjectRecovery } from '@/lib/dino-wallet';
+import { getAddress, isAddress } from 'viem';
+import { deploySafe, waitForSafe, readPendingSafe, PENDING_SAFE_KEY, type PendingSafe } from '@/lib/safe-client';
+import { tichori, type ApplicationState, type ApiTransaction, type MutationAction } from '@/lib/api/client';
+import { unlockIdentity, type KeyEnvelope } from '@/lib/identity-key';
+import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Check, CheckCircle2, Copy, LogOut, Plus, Radio, ShieldCheck, Users, Wallet, X } from 'lucide-react';
+
+
+type Identity={id:string;name:string;address:string|null};
+type Data=ApplicationState;
+type Group=Data['groups'][number];
+type Tx=ApiTransaction;
+type Modal='acoustic-group'|'group'|'send'|'receive'|'details'|null;
+const empty:Data={wallets:[],groups:[],transactions:[]};
+const short=(s:string)=>s.length>24?`${s.slice(0,12)}…${s.slice(-7)}`:s;
+
+export default function TijoriApp({ initialMode }: { initialMode?: 'signup' | 'login' }){
+ const [data,setData]=useState<Data>(empty),[active,setActive]=useState(''),[loaded,setLoaded]=useState(false),[authMode,setAuthMode]=useState<'signup'|'login'>(initialMode ?? 'signup'),[vaultId,setVaultId]=useState(''),[modal,setModal]=useState<Modal>(null),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+ const [authStarted, setAuthStarted] = useState(!!initialMode);
+ const modalDialog = useRef<HTMLDialogElement>(null);
+ useEffect(() => {
+  const dialog = modalDialog.current;
+  if (!modal || !dialog) return;
+  const previousOverflow = document.body.style.overflow;
+  dialog.showModal();
+  document.body.style.overflow = 'hidden';
+  return () => { dialog.close(); document.body.style.overflow = previousOverflow; };
+ }, [modal]);
+ const [objectMode,setObjectMode]=useState(true),[identityBusy,setIdentityBusy]=useState(false);
+ const authBusy=busy||identityBusy;
+ const [passphrase,setPassphrase]=useState('');
+ const [pendingSafe,setPendingSafe]=useState<PendingSafe|null>(null),[recoveryHash,setRecoveryHash]=useState(''),[safeStatus,setSafeStatus]=useState<{vaultId:string;balanceEth:string;owners:string[];threshold:number}|null>(null),[balanceError,setBalanceError]=useState('');
+ const [name,setName]=useState(''),[address,setAddress]=useState(''),[objectName,setObjectName]=useState(''),[memberInput,setMemberInput]=useState(''),[members,setMembers]=useState<string[]>([]),[groupId,setGroupId]=useState(''),[recipient,setRecipient]=useState(''),[amount,setAmount]=useState(''),[asset,setAsset]=useState('ETH'),[note,setNote]=useState(''),[selected,setSelected]=useState<Tx|null>(null),[matched,setMatched]=useState(false);
+ useEffect(()=>{tichori.state(sessionStorage.getItem('pv-session')||undefined).then(async result=>{setData(result);setActive(sessionStorage.getItem('pv-session')||'');try{setPendingSafe(readPendingSafe())}catch(e){setError(e instanceof Error?e.message:'Pending deployment record is invalid.')}try{const remembered=[...await listDeviceIdentities(),...await listServerIdentities()];if(!initialMode&&remembered.some(item=>item.status==='registered')&&!remembered.some(item=>item.status==='pending'))setAuthMode('login')}catch{}setLoaded(true)}).catch(()=>{setError('Could not load storage. Check the server configuration and reload.');setLoaded(true)})},[initialMode]);
+ const wallet=data.wallets.find(w=>w.id===active), groups=data.groups, currentGroup=groups.find(g=>g.id===groupId);
+ const [matching,setMatching]=useState<Tx[]>([]);
+ const stateRequest=useRef(0);
+ const localDemo=data.storageMode==='local';
+ // Discover enrolled peers and newly created groups without overlapping requests.
+ useEffect(()=>{
+  if(!active||busy||vaultId)return;
+  let disposed=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();
+  async function poll(){
+   const version=stateRequest.current;
+   try{const res=await fetch('/api/v1/state?identityId='+encodeURIComponent(active),{cache:'no-store',signal:controller.signal});const result=await res.json();if(!res.ok)throw Error(result.error);if(!disposed&&version===stateRequest.current)setData(result)}catch{}
+   finally{if(!disposed)timer=setTimeout(poll,localDemo?2500:5000)}
+  }
+  void poll();return()=>{disposed=true;controller.abort();clearTimeout(timer)};
+ },[localDemo,active,busy,vaultId]);
+ async function refreshState(){
+  const request=++stateRequest.current;setBusy(true);setError('');
+  try{const result=await tichori.state(active||undefined);if(request!==stateRequest.current)return false;setData(result);return true}
+  catch(e){if(request===stateRequest.current)setError(e instanceof Error?e.message:'Could not refresh the vault.');return false}
+  finally{if(request===stateRequest.current)setBusy(false)}
+ }
+ async function checkRequests(id=groupId){
+  setMatched(false);setMatching([]);if(!id)return;
+  const request=++stateRequest.current;setBusy(true);setError('');
+  try{const result=await tichori.discover(active,id);if(request!==stateRequest.current)return;setMatching(result.requests);setMatched(true)}
+  catch(e){if(request===stateRequest.current)setError(e instanceof Error?e.message:'Could not discover requests.')}
+  finally{if(request===stateRequest.current)setBusy(false)}
+ }
+ function showVaults(){setVaultId('');setError('');setNotice('');if(!busy)void refreshState()}
+ function showVault(id:string){setVaultId(id);setSafeStatus(null);setBalanceError('');setError('');setNotice('');if(!busy)void refreshState();if(data.groups.find(item=>item.id===id)?.safe)void loadBalance(id)}
+ async function loadBalance(id:string){try{const value=await tichori.balance(id);setSafeStatus({vaultId:id,balanceEth:value.balanceEth,owners:value.owners,threshold:value.threshold});setBalanceError('')}catch{setSafeStatus(null);setBalanceError('Unable to load the Base Sepolia balance.')}}
+ async function copyAddress(address:string){try{await navigator.clipboard.writeText(address);setNotice('Address copied.')}catch{setError('Could not copy the vault address.')}}
+ const close=()=>{setModal(null);setError('');setMatched(false)};
+ function open(m:Modal,initialGroupId?:string){const id=initialGroupId||groups.find(item=>!item.safe)?.id||'';setError('');setNotice('');setName('');setMemberInput('');setMembers([]);setGroupId(id);setRecipient('');setAmount('');setNote('');setMatched(false);setModal(m);if(m==='receive')void checkRequests(id)}
+ async function submit(path:MutationAction, body:object, message:string, recovery?:ObjectRecovery){
+  ++stateRequest.current;setBusy(true);setError('');
+  try{
+   const encoded=JSON.stringify(body);
+   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(encoded));
+   const fingerprint=path+':'+Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('');
+   let operation:{fingerprint:string;id:string}|null=null;
+   try{operation=JSON.parse(sessionStorage.getItem('pv-operation')||'null')}catch{}
+   if(operation?.fingerprint!==fingerprint||typeof operation?.id!=='string')operation={fingerprint,id:crypto.randomUUID()};
+   sessionStorage.setItem('pv-operation',JSON.stringify(operation));
+   const result=await tichori.mutate(path,body,operation.id);
+   if(path==='login'){
+    if(recovery) await unlockObjectIdentity(recovery,result.keyEnvelope as KeyEnvelope);
+    else await unlockIdentity((body as {address:string}).address,result.keyEnvelope as KeyEnvelope,passphrase);
+   }
+   if(path==='signup') sessionStorage.removeItem('pv-pending-identity');
+   setPassphrase('');sessionStorage.removeItem('pv-operation');setData(result);
+   if(result.identityId){setActive(result.identityId);sessionStorage.setItem('pv-session',result.identityId);setObjectName('');setAddress('')}
+   close();setNotice(message);return true
+  }catch(e){setError(e instanceof Error?e.message:'Something went wrong.');return false}finally{setBusy(false)}
+ }
+
+ async function submitObjectIdentity(body:{name?:string;address:string;objectName:string;keyEnvelope?:KeyEnvelope;objectProfile?:ObjectProfile},recovery:ObjectRecovery){
+  if(authMode==='signup'){
+   try{
+    const stored=sessionStorage.getItem('pv-pending-identity');
+    const pending=stored?JSON.parse(stored):null;
+    if(pending && JSON.stringify(pending)!==JSON.stringify(body))throw Error('A signup is awaiting confirmation. Resume its remembered identity and original name, or restore its backup before retrying.');
+    sessionStorage.setItem('pv-pending-identity',JSON.stringify(body));
+   }catch(e){setError(e instanceof Error?e.message:'Could not preserve the pending signup.');return false}
+  }
+  return await submit(authMode,body,authMode==='signup'?'Identity created. This browser remembers your object.':'Object matched. Welcome back.',recovery);
+ }
+ async function submitIdentity(){await submit('login',{address,objectName},'Welcome back.')}
+
+ function addPeer(peer:Identity){if(peer.address&&!members.some(item=>item.toLowerCase()===peer.address!.toLowerCase()))setMembers([...members,peer.address]);}
+ function addMember(){const value=memberInput.trim();if(!value)return;if(!isAddress(value)){setError('Enter a valid EVM wallet address.');return}const address=getAddress(value);if(members.some(item=>item.toLowerCase()===address.toLowerCase())){setError('This signer has already been added.');return}setMembers([...members,address]);setMemberInput('');setError('')}
+ async function finishSafe(pending:PendingSafe){
+  if(pending.creatorId!==active)throw Error('Log in as the demo identity that started this deployment.');
+  await waitForSafe(pending);
+  const hash=pending.deploymentTxHash!;
+  const body={name:pending.name,creatorId:pending.creatorId,owners:pending.owners,saltNonce:pending.saltNonce,address:pending.address,deploymentTxHash:hash};
+  const result=await tichori.mutate('register-safe',body,'safe-'+hash.slice(2));
+  const created=(result.groups as Group[]).find(item=>item.safe?.deploymentTxHash.toLowerCase()===hash.toLowerCase());
+  if(!created)throw Error('Safe deployment was recorded but could not be found. Resume this operation.');
+  localStorage.removeItem(PENDING_SAFE_KEY);setPendingSafe(null);setData(result);setVaultId(created.id);setSafeStatus(null);setBalanceError('');close();setNotice('Safe vault deployed and saved to Arkiv.');void loadBalance(created.id);
+ }
+ async function createVault(){
+  if(!name.trim()||name.trim().length>120||!members.length||members.length>31){setError('Enter a vault name of at most 120 characters and 1–31 other signer addresses.');return}
+  ++stateRequest.current;setBusy(true);setError('');
+  try{const pending=await deploySafe(name.trim(),active,members);setPendingSafe(pending);await finishSafe(pending)}catch(e){try{setPendingSafe(readPendingSafe())}catch{}setError(e instanceof Error?e.message:'Could not create the vault.')}finally{setBusy(false)}
+ }
+ async function resumeVault(){
+  if(!pendingSafe)return;let pending=pendingSafe;
+  if(!pending.deploymentTxHash){if(!/^0x[\da-f]{64}$/i.test(recoveryHash.trim())){setError('Enter the deployment transaction hash from your wallet.');return}pending={...pending,phase:'submitted',deploymentTxHash:recoveryHash.trim() as `0x${string}`};localStorage.setItem(PENDING_SAFE_KEY,JSON.stringify(pending));setPendingSafe(pending)}
+  ++stateRequest.current;setBusy(true);setError('');try{await finishSafe(pending)}catch(e){setError(e instanceof Error?e.message:'Could not resume the vault deployment.')}finally{setBusy(false)}
+ }
+
+ function signOut(){setAuthStarted(false);sessionStorage.removeItem('pv-session');setActive('');setVaultId('');setName('');setAddress('');setObjectName('');setPassphrase('');setError('');setNotice('');setAuthMode('login')}
+ const changeGroup=(id:string)=>{setGroupId(id);void checkRequests(id)};
+ const vault=groups.find(item=>item.id===vaultId);
+ const vaultAddress=vault?.safe?.address;
+ const liveSafe=safeStatus?.vaultId===vaultId?safeStatus:null;
+ const t=data.transactions.find(x=>x.id===selected?.id)||selected;
+ const canApprove=t?.canApprove;
+ if(!loaded)return <div className="loading">Loading your vault…</div>;
+ if(!wallet)return <main className="auth-shell journey-shell">
+  <AuthAtmosphere/>
+  <div className="auth-brand"><Brand/><span className="auth-return-note">A LITTLE SPACE FOR YOUR PEOPLE</span></div>
+  <div className="auth-layout journey-layout"><div className="auth-intro journey-card">
+   <JourneyIntro active={authStarted}>
+   <div className="journey-heading"><div className="eyebrow"><span className="sparkle">✳</span> A LITTLE MORE TOGETHER</div><h1>What matters,<br/><em>held together.</em></h1><p>A shared space for your people and the things you protect together.</p></div>
+   <div className="journey-body">
+    {!authStarted ? <FlowPanel step="welcome" focus={false} direction={-1} animate={false}><div className="entry-heading"><h2>Make yourself at home.</h2><p>New here or picking up where you left off?</p></div><div className="entry-actions"><button className="entry-primary" onClick={()=>{setAuthMode('signup');setObjectMode(true);setError('');setAuthStarted(true)}}>Sign up <ArrowRight size={17}/></button><button className="entry-secondary" onClick={()=>{setAuthMode('login');setObjectMode(true);setError('');setAuthStarted(true)}}>Log in <ArrowRight size={17}/></button></div><p className="entry-preview">A name, an object photo, and you’re ready.</p></FlowPanel> : <div className="auth-card auth-form journey-form">
+     {objectMode ? <ObjectIdentityForm key={authMode} mode={authMode} busy={authBusy} onWorking={setIdentityBusy} onSubmit={submitObjectIdentity} onBack={()=>{setAuthStarted(false);setError('')}}/> : <FlowPanel step="passphrase"><div className="flow-content"><div className="flow-navigation"><button className="flow-back" disabled={authBusy} onClick={()=>{setObjectMode(true);setPassphrase('');setError('')}}><ArrowLeft size={15}/> Back</button><span>EXISTING IDENTITY</span></div><h2 data-step-heading tabIndex={-1}>Welcome back.</h2><p className="flow-description">Use the passphrase you originally registered.</p><label>Public address<input value={address} onChange={e=>setAddress(e.target.value)} placeholder="0x…" autoComplete="username"/></label><label>Key passphrase<input type="password" value={passphrase} onChange={e=>setPassphrase(e.target.value)} autoComplete="current-password"/></label><label>Registered object description<input value={objectName} onChange={e=>setObjectName(e.target.value)}/></label><p className="form-hint">Existing identities use their original passphrase and simulated object description.</p></div><div className="flow-actions"><button className="submit" data-primary-action disabled={authBusy} onClick={()=>void submitIdentity()}>Log in <ArrowRight size={17}/></button></div></FlowPanel>}
+     {authMode==='login'&&objectMode&&<button className="legacy-login-link" disabled={authBusy} onClick={()=>{setObjectMode(false);setError('');setPassphrase('')}}>Use an existing passphrase identity</button>}
+     {error&&<div className="error" role="alert">{error}</div>}
+    </div>}
+    {!authStarted&&error&&<div className="error" role="alert">{error}</div>}
+   </div>
+   </JourneyIntro>
+  </div></div>
+  <div className="auth-bottom">TIJORI &nbsp; · &nbsp; BUILT FOR TOGETHER</div>
+ </main>;
+ return <div className="shell"><aside className="sidebar"><div className="brand"><Brand/></div><div className="side-label">WORKSPACE</div><nav><button className="nav active" onClick={showVaults}><Wallet size={18}/><span>My vaults</span></button></nav><div className="side-bottom"><div className="side-card"><div className="side-card-icon"><ShieldCheck size={18}/></div><strong>Better together.</strong><p>Make decisions with your people.</p></div><div className="side-foot"><span className="avatar small">{wallet.name[0]?.toUpperCase()}</span><div><strong>{wallet.name}</strong><small>{wallet.address||'Legacy identity'}</small></div></div></div></aside>
+ <main className="main"><header className="topbar"><div className="crumb"><button onClick={showVaults}>My vaults</button>{vault&&<><span>/</span><strong>{vault.name}</strong></>}</div><div className="top-actions"><span className="demo-pill"><span/> {localDemo?'LOCAL WI-FI TEST':'ARKIV DEMO'}</span><button className="signout" aria-label="Log out" onClick={signOut}><LogOut size={16}/> <span>Log out</span></button></div></header>
+ <div className="content"><div className="welcome"><div><div className="eyebrow"><span className="sparkle">✳</span> YOUR SHARED SPACE</div>{vault?<><button className="back-link" onClick={showVaults}><ArrowLeft size={14}/> All vaults</button><h1>{vault.name}</h1><p>{vault.safe?(liveSafe?`${liveSafe.owners.length} signers · ${liveSafe.threshold} approvals needed`:'Loading signer details…'):`${vault.members.length} members · ${vault.requiredApprovals} approvals needed`}</p></>:<><h1>My vaults</h1><p>All the people and vaults you share decisions with.</p></>}</div>{!vault&&<button className="primary" onClick={()=>open(localDemo?'acoustic-group':'group')}><Plus size={17}/> {localDemo?'Create acoustic group':'Create vault'}</button>}</div>
+ {localDemo&&<div className="notice">Local Wi-Fi test · Users, groups and acoustic matches are saved only on this laptop. No Arkiv writes or fees.</div>}{notice&&<div className="notice" role="status"><CheckCircle2 size={17}/>{notice}<button onClick={()=>setNotice('')} aria-label="Dismiss"><X size={16}/></button></div>}{error&&!modal&&<div className="error">{error}</div>}
+ {!vaultId&&<section className="workspace-card paper-surface" aria-label="Workspace overview"><div className="section-kicker">A SPACE FOR YOUR PEOPLE</div><h2>Better together,<br/><span className="entity-token"><span className="entity-avatar" aria-hidden="true">{wallet.name[0]?.toUpperCase()}</span>{wallet.name}.</span></h2><div className="workspace-metrics"><div><strong>{groups.length}</strong><span>Shared {groups.length===1?'vault':'vaults'}</span></div><div><strong>{data.transactions.filter(item=>item.status!=='completed').length}</strong><span>Demo requests pending</span></div></div></section>}
+ {!vaultId&&<section className="vault-list-section"><div className="section-heading"><div><div className="section-kicker">YOUR SHARED VAULTS</div>{wallet.address&&<p className="form-hint">Your public address: {wallet.address} <button onClick={()=>void copyAddress(wallet.address!)}>Copy</button></p>}<h2>Vaults <span>{groups.length}</span></h2></div></div>{groups.length===0?<div className="empty-groups"><div className="empty-icon"><Users size={23}/></div><div><strong>Good things happen together.</strong><p>Create a vault and bring your people together.</p></div><button className="light-btn" onClick={()=>open(localDemo?'acoustic-group':'group')}><Plus size={16}/> {localDemo?'Create acoustic group':'Create your first vault'}</button></div>:<div className="vault-list">{groups.map((item,i)=><button className="vault-list-item" key={item.id} onClick={()=>showVault(item.id)}><span className={'wallet-icon color'+i%3}><Wallet size={19}/></span><span className="vault-list-copy"><strong>{item.name}</strong><small>{item.safe?`${item.safe.owners.length} signers at creation · Base Sepolia`:`${item.members.length} members · ${item.requiredApprovals} approvals needed`}</small></span><span className="vault-list-action">Open vault <ArrowRight size={16}/></span></button>)}</div>}</section>}
+ {vaultId&&!vault&&<div className="empty-groups"><p>This vault is unavailable for the current demo identity.</p><button className="light-btn" onClick={showVaults}>Back to my vaults</button></div>}
+ {vault&&<><section className="acoustic-section"><div className="section-heading"><div><div className="section-kicker">GET TOGETHER</div><h2>Acoustic proximity check</h2></div></div><p className="form-hint">Send broadcasts a two-minute challenge. Other enrolled vault members join from their devices. Matches are saved in {localDemo?'the laptop’s encrypted local database':'encrypted Arkiv state'} and never authorize a transfer.</p><ProximityCheck key={`${vault.id}:${active}`} group={vault} walletId={active} storageMode={data.storageMode}/></section><div className="portfolio"><div className="portfolio-main"><div className="portfolio-label">{vault.safe?'BASE SEPOLIA BALANCE':'TOTAL DEMO BALANCE'} <span>✳</span></div><div className="portfolio-amount">{vault.safe?(liveSafe?.balanceEth??'—'):'0.00'} <span>ETH</span></div><p>{vault.safe?(balanceError||'Native ETH balance on Base Sepolia'):'Placeholder balance · simulated transactions'}</p><div className="portfolio-actions">{vault.safe?<><a href={`https://app.safe.global/home?safe=basesep:${vault.safe.address}`} target="_blank" rel="noreferrer"><ArrowUpRight size={16}/> Send transaction</a><a href={`https://app.safe.global/transactions/queue?safe=basesep:${vault.safe.address}`} target="_blank" rel="noreferrer"><Radio size={16}/> Open Safe queue</a></>:<><button onClick={()=>{open('send',vault.id)}}><ArrowUpRight size={16}/> Send transaction</button><button onClick={()=>{open('receive',vault.id)}}><Radio size={16}/> Listen for transaction</button></>}</div></div><div className="portfolio-art"><div className="portfolio-orbit"><Wallet size={45} strokeWidth={1.2}/></div></div><div className="portfolio-note">{vault.safe?'BASE SEPOLIA':'DEMO BALANCE'}</div></div><div className="balance-note">{vault.safe?'Transactions and signatures for this Safe are handled in the Safe app. Acoustic checks below are separate from Safe transactions and signatures.':'This group has no deployed Safe. Its balance and legacy demo transactions are placeholders.'}</div><div className="vault-address"><div><span>VAULT ADDRESS</span><strong>{vaultAddress||'Not available yet'}</strong><small>{vaultAddress?'Verified Safe address on Base Sepolia.':'A fund-holding wallet address has not been created.'}</small></div><button className="light-btn" disabled={!vaultAddress} onClick={()=>vaultAddress&&void copyAddress(vaultAddress)}><Copy size={15}/> Copy address</button></div><PhoneAccess/><section className="vault-members"><div className="section-heading"><div><div className="section-kicker">THE PEOPLE IN THIS VAULT</div><h2>{vault.safe?'Signers':'Members'} <span>{vault.safe?(liveSafe?.owners.length??'—'):vault.members.length}</span></h2></div></div><div className="member-list">{vault.safe?(liveSafe?liveSafe.owners.map((address,i)=><div className="member-row" key={address}><span className={'mini-avatar color'+i%3}><Wallet size={15}/></span><span><strong>Signer {i+1}</strong><small>{address}</small></span></div>):<div className="member-row"><span>{balanceError||'Loading current signers…'}</span></div>):vault.members.map((member,i)=><div className="member-row" key={member.id}><span className={'mini-avatar color'+i%3}>{member.name[0]?.toUpperCase()}</span><span><strong>{member.name}</strong><small>{member.address || 'Legacy identifier (no address)'}</small></span>{member.id===active&&<span className="member-you">YOU</span>}</div>)}</div></section><section className="activity"><div className="section-heading"><div><div className="section-kicker">KEEPING YOU IN THE LOOP</div><h2>Vault activity</h2>{vault.safe&&<p className="form-hint">On-chain transactions are available in the Safe app.</p>}</div></div>{data.transactions.filter(item=>item.group_id===vault.id).length===0?<div className="empty-activity"><div className="empty-icon"><AudioLines size={22}/></div><div><strong>All quiet here for now.</strong><p>Requests for this vault will appear here.</p></div></div>:<div className="tx-list">{data.transactions.filter(item=>item.group_id===vault.id).map(item=><button className="tx-row" key={item.id} onClick={()=>{setMatched(false);setSelected(item);setModal('details')}}><div className="tx-icon"><ArrowUpRight size={19}/></div><div className="tx-info"><strong>To {short(item.recipient)}</strong><small>{item.sender_name} · {item.approvals.length}/{vault.requiredApprovals} approvals</small></div><div className="tx-amount"><strong>{item.amount} {item.asset}</strong><small className={item.status==='completed'?'success':'pending'}>{item.status==='completed'?'Completed (simulated)':'Awaiting approval'}</small></div><ArrowRight size={16}/></button>)}</div>}</section></>}
+ {!vault&&<section className="acoustic-section"><div className="section-heading"><div><h2>Try acoustic matching</h2><p className="form-hint">Create a group using your members’ identity addresses, then open it to Send or Join a check.</p></div><button className="light-btn" onClick={()=>open('acoustic-group')}><Radio size={16}/> Create acoustic group</button></div><PhoneAccess/></section>}
+ <footer><span><ShieldCheck size={15}/> Made for trust, built for together.</span><span>TIJORI &nbsp; © 2026</span></footer></div></main>
+ <nav className="mobile-nav" aria-label="Main navigation"><button className="active" onClick={showVaults}><Wallet size={19}/><span>My vaults</span></button></nav>
+ {modal&&<dialog ref={modalDialog} className="overlay" aria-label={modal==='details'?'Transaction details':modal==='acoustic-group'?'Create an acoustic group':modal==='group'?'Create a vault':modal==='send'?'Send a transaction':'Listen for a transaction'} onCancel={e=>{e.preventDefault();close()}} onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><div className="modal"><button className="modal-close" onClick={close} aria-label="Close"><X size={19}/></button>
+ {modal==='acoustic-group'&&<><div className="modal-icon"><Radio/></div><div className="section-kicker">GET TOGETHER</div><h2>Create an acoustic group</h2><p className="modal-desc">{localDemo?'Choose another enrolled user below. This group is saved on the laptop; it does not deploy a Safe.':'Choose another enrolled user below. This group is saved in Arkiv without deploying a Safe.'}</p><label>Group name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Acoustic test group"/></label>{<div className="discovered-peers"><strong>Registered people</strong><p className="form-hint">New users appear automatically. Each device needs its own identity.</p>{(data.peers||[]).filter(peer=>peer.id!==active).map(peer=><button type="button" className="peer-option" disabled={busy||members.some(item=>item.toLowerCase()===peer.address?.toLowerCase())} key={peer.id} onClick={()=>addPeer(peer)}><span><strong>{peer.name}</strong><small>{peer.address}</small></span><span>{members.some(item=>item.toLowerCase()===peer.address?.toLowerCase())?'Added':'+ Add'}</span></button>)}{!(data.peers||[]).some(peer=>peer.id!==active)&&<p className="form-hint">Waiting for another device to create a user…</p>}</div>}<label>Member identity address</label><div className="member-entry"><input value={memberInput} onChange={e=>setMemberInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addMember()}}} placeholder="0x…" aria-label="Member identity address"/><button onClick={addMember} type="button"><Plus size={16}/> Add</button></div><p className="form-hint">Your identity is included automatically. Invite at least one other enrolled identity.</p><div className="member-chips">{members.map(id=><span key={id}>{short(id)}<button aria-label={`Remove ${id}`} onClick={()=>setMembers(members.filter(m=>m!==id))}><X size={14}/></button></span>)}</div><button className="submit" disabled={busy||!name.trim()||!members.length} onClick={()=>submit('groups',{name,creatorId:active,addresses:members},'Acoustic group created. Open it to start a check.')}>Create acoustic group <ArrowRight size={17}/></button></>}
+ {modal==='group'&&<><div className="modal-icon"><Users/></div><div className="section-kicker">BETTER TOGETHER</div><h2>Create a vault</h2><p className="modal-desc">Deploy a Safe on Base Sepolia. Connect your wallet and add the other signers.</p><label>Vault name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. The family vault"/></label><label>Signer wallet address</label><div className="member-entry"><input value={memberInput} onChange={e=>setMemberInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addMember()}}} placeholder="0x…" aria-label="Signer wallet address"/><button onClick={addMember} type="button"><Plus size={16}/> Add</button></div><p className="form-hint">Your connected wallet is included automatically. Add at least one other signer.</p><div className="member-chips">{members.map(id=><span key={id}>{id}<button aria-label={`Remove ${id}`} onClick={()=>setMembers(members.filter(m=>m!==id))}><X size={14}/></button></span>)}</div><div className="signal-banner"><Radio size={20}/><div><strong>Base Sepolia · {Math.floor((members.length+1)/2)+1} of {members.length+1} signatures</strong><small>Your wallet will ask you to approve the deployment. Arkiv stores the verified vault details.</small></div></div>{pendingSafe?<div className="recovery-box"><strong>Vault deployment awaiting confirmation</strong><small>Resume the existing deployment without creating another contract.</small>{!pendingSafe.deploymentTxHash&&<label>Deployment transaction hash<input value={recoveryHash} onChange={e=>setRecoveryHash(e.target.value)} placeholder="0x…"/></label>}<button className="submit" disabled={busy} onClick={()=>void resumeVault()}>Resume deployment <ArrowRight size={17}/></button></div>:<button className="submit" disabled={busy} onClick={()=>void createVault()}>Create vault <ArrowRight size={17}/></button>}</>}
+ {modal==='send'&&<><div className="modal-icon"><ArrowUpRight/></div><div className="section-kicker">MAKE A MOVE, TOGETHER</div><h2>Send a transaction</h2><p className="modal-desc">Start a simulated request for your vault members to review and approve.</p><label>From vault<select value={groupId} onChange={e=>setGroupId(e.target.value)}><option value="">Select a vault</option>{groups.filter(g=>!g.safe).map(g=><option value={g.id} key={g.id}>{g.name}</option>)}</select></label><label>Recipient<input value={recipient} onChange={e=>setRecipient(e.target.value)} placeholder="Wallet address or demo recipient"/></label><div className="form-row"><label>Amount<input type="number" min="0" step="any" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00"/></label><label>Asset<select value={asset} onChange={e=>setAsset(e.target.value)}><option>ETH</option><option>USDC</option></select></label></div><label>Note <span className="optional">optional</span><input value={note} onChange={e=>setNote(e.target.value)} placeholder="What is this for?"/></label><div className="signal-banner"><Radio size={20}/><div><strong>Sending on your vault’s signal</strong><small>Signal transmission is simulated in this demo.</small></div></div><button className="submit" disabled={busy} onClick={()=>submit('transactions',{groupId,senderId:active,recipient,amount,asset,note},'Transaction request created. Your approval was counted.')}>Send request <ArrowRight size={17}/></button></>}
+ {modal==='receive'&&<><div className="modal-icon"><Radio/></div><div className="section-kicker">YOUR VAULT SIGNAL</div><h2>Listen for a transaction</h2><p className="modal-desc">Select a vault to check for simulated transaction requests.</p><label>Listening for<select value={groupId} onChange={e=>changeGroup(e.target.value)}><option value="">Select a vault</option>{groups.filter(g=>!g.safe).map(g=><option value={g.id} key={g.id}>{g.name}</option>)}</select></label><div className="dial-wrap"><div className="dial"><div className="dial-inner"><Radio size={27}/><strong className="dial-listening">{matched?'Listening':'Ready'}</strong><small>VAULT SIGNAL</small></div></div></div><div className="signal-banner"><AudioLines size={20}/><div><strong>Listening on your vault’s signal</strong><small>Microphone listening and signal matching are simulated. No microphone is used.</small></div></div>{matched&&<div className="match-result">{matching.length?matching.map(t=><button key={t.id} onClick={()=>{setSelected(t);setModal('details')}}><span><strong>Transaction found</strong><small>{t.amount} {t.asset} to {short(t.recipient)}</small></span><ArrowRight size={17}/></button>):<p>No pending requests available for this identity.</p>}</div>}<button className="submit" disabled={!currentGroup||busy} onClick={()=>void checkRequests()}>{matched?'Check again':'Listen for requests'} <ArrowRight size={17}/></button></>}
+ {modal==='details'&&t&&<><div className="modal-icon"><ArrowUpRight/></div><div className="section-kicker">TRANSACTION REQUEST</div><h2>{t.amount} {t.asset}</h2><p className="modal-desc">Review the details before making a decision.</p><div className="details"><div><span>Vault</span><strong>{t.group_name}</strong></div><div><span>From</span><strong>{t.sender_name}</strong></div><div><span>To</span><strong>{t.recipient}</strong></div><div><span>Note</span><strong>{t.note||'—'}</strong></div><div><span>Status</span><strong>{t.status==='completed'?'Completed (simulated)':'Awaiting approval'}</strong></div><div><span>Approvals</span><strong>{t.approvals.length} of {t.requiredApprovals} needed</strong></div></div><div className="approval-people">Approved by {t.approvals.map(a=>a.name).join(', ')}</div>{canApprove&&<><div className="signal-banner"><Radio size={20}/><div><strong>Approval follows a simulated signal match</strong><small>Receive the request to review and approve it.</small></div></div>{matched&&groupId===t.group_id?<button className="submit" disabled={busy} onClick={()=>submit('approve',{transactionId:t.id,walletId:active},'Approval recorded.')}>Approve transaction <Check size={17}/></button>:<button className="submit" onClick={()=>{setModal('receive');changeGroup(t.group_id)}}>Listen for transaction <Radio size={17}/></button>}</>}</>}
+ {error&&<div className="error modal-error" role="alert">{error}</div>}</div></dialog>}
+ </div>;
+}
