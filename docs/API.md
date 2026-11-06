@@ -14,7 +14,7 @@ Tichori UI / another local app
     -> lib/vault.ts / existing encrypted Arkiv store
 ```
 
-All existing unversioned API routes remain available and use the same integrated service. There is no new storage schema or automatic migration. Existing locks, fee reservations, signed journals, fail-closed recovery and the last 100 successful mutation keys remain in use.
+All existing unversioned API routes remain available and use the same integrated service. This branch uses the additive v5 object-profile schema migration described in README.md; all versioned and legacy mutations use the same selected storage adapter. Existing locks, fee reservations, signed journals, fail-closed recovery and the last 100 successful mutation keys remain in use.
 
 | Workstream | Contract to implement | Wiring location |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ The physical provider receives the stored legacy transaction details from the se
 
 ## Endpoint contract
 
-Base path: `/api/v1`. JSON requests and responses. Validation failures return `{ "error": "..." }` with HTTP 400, unavailable integrations return 501, and storage failures return 503. Responses are not cached. POST bodies are limited to 16,384 bytes. Do not send plaintext keys, passphrases or images. Use the separately reviewed capture system and pass only bounded opaque evidence references:
+Base path: `/api/v1`. JSON requests and responses. Validation failures return `{ "error": "..." }` with HTTP 400, unavailable integrations return 501, and storage failures return 503. Responses are not cached. Signup bodies (legacy `/signup` and v1 `/identities`) are limited to 32,768 bytes for compact object profiles; other POST bodies are limited to 16,384 bytes. Do not send plaintext keys, passphrases or images. Use the separately reviewed capture system and pass only bounded opaque evidence references:
 
 ```json
 { "reference": "capture-reference", "challengeId": "challenge-reference" }
@@ -104,6 +104,10 @@ For Safe creation, request `/vaults/prepare`, review and submit the unsigned tra
 Add actual user authentication, application isolation and permissions, authenticated enrollment access, a reviewed enrollment/recovery protocol, durable proof/challenge/session handling, usage controls and an explicit allowed-origin policy. Keep private keys/passphrases local. If a physical approval must be mandatory, enforce it in the supported vault contracts and cover every execution path. The present API scaffold does not provide these guarantees.
 
 Run `npm run build`, then `npm test`, then `npm run lint`. Tests use local fixtures and do not spend testnet funds.
+
+## Browser object-profile integration
+
+DINOv2/SlimSAM processing remains on-device and separate from the server-side simulated object provider. Signup may include a validated `objectProfile`; the server provider hook still runs before mutation. `/api/object-identities` and `/api/v1/object-identities` expose compact profiles and encrypted envelopes for the explicitly insecure object-only flow. State responses include `storageMode` and an enrolled public `peers` directory; v1 wallets/groups/transactions retain identity scoping. Profiles never appear in normal state. Both API aliases use `withState`, honoring explicit local mode and Arkiv by default; local mode rejects Safe preparation/registration. The profile endpoint is unauthenticated and supplies wrapping material, so this is not secure authentication or key custody. Do not expose Arkiv mode publicly.
 
 ## Whitechain treasury endpoints
 

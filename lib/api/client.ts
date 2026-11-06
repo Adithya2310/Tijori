@@ -4,7 +4,7 @@ import type { KeyEnvelope } from '../identity-key.ts';
 import type { PendingSafe } from '../safe-client.ts';
 import type { listApprovalSessions, relayerStatus, startApprovalSession, issueInboxKey } from './treasury.ts';
 
-export type ApplicationState = ReturnType<typeof applicationState>;
+export type ApplicationState = ReturnType<typeof applicationState> & {storageMode?:'local'|'arkiv';peers?:{id:string;name:string;address:string|null}[]};
 export type ApiTransaction = ApplicationState['transactions'][number];
 export type MutationResponse = ApplicationState & { identityId?: string; keyEnvelope?: KeyEnvelope };
 export type SafeStatus = { balanceEth: string; owners: string[]; threshold: number; chainId?: number; balanceUsdt?: string; guard?: string | null; nonce?: string };

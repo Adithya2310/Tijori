@@ -29,11 +29,12 @@ test('USDT amounts parse to 6-decimal units and format back', () => {
  for (const bad of ['0', '-1', '1.0000001', 'abc', '', '1e6']) assert.throws(() => parseUsdt(bad));
 });
 
-test('v3 state migrates explicitly to v4 with empty treasury collections', () => {
- const v3 = { version: 3, wallets: [], groups: [], transactions: [], operations: [] };
- const v4 = validateVault(v3);
- assert.equal(v4.version, 4); assert.deepEqual(v4.proposals, []); assert.deepEqual(v4.invoices, []);
- assert.throws(() => validateVault({ ...v4, version: 5 }), /Invalid vault/);
+test('v3 and v5 state migrate explicitly to v6 with empty treasury collections', () => {
+ const fromV3 = validateVault({ version: 3, wallets: [], groups: [], transactions: [], operations: [] });
+ assert.equal(fromV3.version, 6); assert.deepEqual([fromV3.proximitySessions, fromV3.proposals, fromV3.invoices], [[], [], []]);
+ const fromV5 = validateVault({ version: 5, proximitySessions: [], wallets: [], groups: [], transactions: [], operations: [] });
+ assert.equal(fromV5.version, 6); assert.deepEqual([fromV5.proposals, fromV5.invoices], [[], []]);
+ assert.throws(() => validateVault({ ...fromV5, version: 7 }), /Invalid vault/);
 });
 
 test('proposals: members only, invoice payouts are bound to the invoice, executed payouts mark invoices paid', () => {

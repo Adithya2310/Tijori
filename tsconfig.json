@@ -34,7 +34,11 @@
     ".next/types/**/*.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-phone/types/**/*.ts",
+    ".next-phone/dev/types/**/*.ts",
+    ".next-phone-build/types/**/*.ts",
+    ".next-phone-build/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

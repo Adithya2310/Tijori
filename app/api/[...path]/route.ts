@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { StorageError } from '@/lib/db';
 import { VaultError } from '@/lib/vault';
 import { IntegrationUnavailableError } from '@/lib/integrations/contracts';
-import { balance, capabilities, mutate, prepareDeployment, queryWorkflow, readState, verifyExternalApproval } from '@/lib/api/service';
+import { balance, capabilities, mutate, prepareDeployment, queryWorkflow, readState, readObjectIdentities, verifyExternalApproval } from '@/lib/api/service';
 import { approveInSession, AuthError, createWhitechainVault, issueInboxKey, listApprovalSessions, proposePayout, relayerStatus, startApprovalSession, treasuryExport, vendorCreateInvoice, vendorGetInvoice, vendorRemind } from '@/lib/api/treasury';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,6 +23,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
  try {
   const { path, versioned } = route((await ctx.params).path);
   if (versioned && path === 'capabilities') return json(capabilities());
+  if (path === 'object-identities') return json(await readObjectIdentities());
   const query = req.nextUrl.searchParams;
   if (versioned && path === 'treasury/sessions') return json(await listApprovalSessions(query.get('identityId') || ''));
   if (versioned && path === 'relayer') return json(await relayerStatus());
@@ -36,15 +37,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
   throw new VaultError('Unknown action.');
  } catch (e) { return failure(e); }
 }
-async function readBody(req: NextRequest): Promise<Record<string, unknown>> {
+async function readBody(req: NextRequest, limit: number): Promise<Record<string, unknown>> {
  const origin = req.headers.get('origin');
  // Keep the unauthenticated paid-write demo local. CORS is not authentication.
  if (origin && origin !== `${req.nextUrl.protocol}//${req.headers.get('host')}`) throw new VaultError('Cross-origin writes are not allowed.');
- if (Number(req.headers.get('content-length') || 0) > 16384) throw new VaultError('Request is too large.');
+ if (Number(req.headers.get('content-length') || 0) > limit) throw new VaultError('Request is too large.');
  const reader = req.body?.getReader();
  if (!reader) throw new VaultError('Request body is required.');
  let size = 0; const chunks: Uint8Array[] = [];
- while (true) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > 16384) { await reader.cancel(); throw new VaultError('Request is too large.'); } chunks.push(value); }
+ while (true) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > limit) { await reader.cancel(); throw new VaultError('Request is too large.'); } chunks.push(value); }
  const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new VaultError('Expected a request object.');
  // Block accidental sensitive payloads even before teammates implement providers.
@@ -61,7 +62,8 @@ async function readBody(req: NextRequest): Promise<Record<string, unknown>> {
 export async function POST(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
  try {
   const { path, versioned } = route((await ctx.params).path);
-  const body = await readBody(req);
+  const limit=path==='signup'||(versioned&&path==='identities')?32768:16384;
+  const body = await readBody(req,limit);
   if (versioned) {
    if (path === 'objects/verify') return json(await queryWorkflow('verify-object', body));
    if (path === 'physical-approvals/discover') return json(await queryWorkflow('discover', body));

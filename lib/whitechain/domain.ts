@@ -1,4 +1,4 @@
-// Pure treasury domain rules over the vault aggregate. No I/O; callers persist through withArkiv.
+// Pure treasury domain rules over the vault aggregate. No I/O; callers persist through withState (Arkiv or local storage).
 import { randomUUID } from 'node:crypto';
 import { getAddress, isAddress } from 'viem';
 import { VaultError, type Invoice, type Proposal, type Vault } from '../vault.ts';

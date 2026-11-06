@@ -1,8 +1,8 @@
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { formatEther, isAddress } from 'viem';
-import { withArkiv, StorageError } from '../db.ts';
-import { publicState, VaultError } from '../vault.ts';
+import { withState, storageMode, StorageError } from '../db.ts';
+import { publicState, VaultError, type Vault } from '../vault.ts';
 import { normalizeOwners, prepareSafe, SAFE_CHAIN_ID, verifySafeDeployment, readSafeStatus } from '../safe.ts';
 import { providers } from '../integrations/providers.ts';
 import { readWhitechainSafe } from '../whitechain/safe.ts';
@@ -21,14 +21,18 @@ export function capabilities() {
   whitechain: treasuryCapabilities(),
  };
 }
+function storageMetadata(vault: Vault) {return {storageMode:storageMode(),peers:vault.wallets.filter(w=>w.address&&w.keyEnvelope&&w.object_name).map(({id,name,address})=>({id,name,address}))};}
+export async function readObjectIdentities() {
+ return withState(async store=>{const {vault}=await store.read();return {identities:vault.wallets.filter(w=>w.objectProfile&&w.keyEnvelope).map(w=>({name:w.name,address:w.address,keyEnvelope:w.keyEnvelope,objectProfile:w.objectProfile})),storageMode:storageMode()};});
+}
 export async function readState(identityId?: string, versioned = false) {
- return withArkiv(async store => {
+ return withState(async store => {
   const { vault } = await store.read();
-  return versioned ? applicationState(vault, identityId) : publicState(vault);
+  return {...(versioned ? applicationState(vault, identityId) : publicState(vault)),...storageMetadata(vault)};
  });
 }
 export async function balance(id: string | null) {
- const safe = await withArkiv(async store => (await store.read()).vault.groups.find(g => g.id === id)?.safe);
+ const safe = await withState(async store => (await store.read()).vault.groups.find(g => g.id === id)?.safe);
  if (!safe) throw new VaultError('This vault has no deployed Safe.');
  if (safe.chainId === 1874) {
   try {
@@ -40,9 +44,10 @@ export async function balance(id: string | null) {
  catch { throw new StorageError('Could not read the Safe on Base Sepolia.'); }
 }
 export async function prepareDeployment(body: Record<string, unknown>) {
+ if(storageMode()==='local')throw new VaultError('Safe deployment is disabled in local acoustic testing mode.');
  const name = typeof body.name === 'string' ? body.name.trim() : '';
  if (!name || name.length > 120) throw new VaultError('Enter a vault name of at most 120 characters.');
- await withArkiv(async store => {
+ await withState(async store => {
   if (!(await store.read()).vault.wallets.some(w => w.id === body.creatorId && w.object_name)) throw new VaultError('Choose a registered demo identity.');
  });
  const owners = normalizeOwners(body.owners);
@@ -53,7 +58,7 @@ export async function prepareDeployment(body: Record<string, unknown>) {
  return { name, creatorId: body.creatorId, owners, saltNonce, address, chainId: SAFE_CHAIN_ID, threshold: Math.floor(owners.length / 2) + 1, transaction: { to: tx.to, data: tx.data, value: `0x${BigInt(tx.value).toString(16)}` } };
 }
 export async function queryWorkflow(action: 'discover' | 'verify-object', body: Record<string, unknown>) {
- return withArkiv(async store => {
+ return withState(async store => {
   const { vault } = await store.read();
   return action === 'discover' ? discoverRequests(vault, body, providers) : verifyObject(vault, body, providers);
  });
@@ -69,10 +74,11 @@ export async function verifyExternalApproval(body: Record<string, unknown>) {
  return { verification, transactionHash, vaultAddress, chainId, executed: false };
 }
 export async function mutate(action: string, body: Record<string, unknown>, operationId?: string | null, versioned = false) {
+ if(storageMode()==='local'&&action==='register-safe')throw new VaultError('Safe deployment registration is disabled in local acoustic testing mode.');
  const id = operationId || randomUUID();
  if (!/^[\w-]{1,100}$/.test(id)) throw new VaultError('Invalid operation ID.');
  const digest = createHash('sha256').update(JSON.stringify([action, body])).digest('hex');
- return withArkiv(async store => {
+ return withState(async store => {
   const previous = await store.read(), vault = previous.vault;
   const saved = vault.operations.find(o => o.id === id);
   if (saved && saved.digest !== digest) throw new VaultError('This operation ID was already used with different input.');
@@ -88,6 +94,6 @@ export async function mutate(action: string, body: Record<string, unknown>, oper
    await store.write(vault, previous);
   }
   const state = versioned ? applicationState(vault, actionIdentity(action, body, identityId)) : publicState(vault);
-  return { ...state, ...(identityId ? { identityId } : {}), ...(action === 'login' && identityId ? { keyEnvelope: vault.wallets.find(w => w.id === identityId)?.keyEnvelope } : {}) };
+  return { ...state, ...storageMetadata(vault), ...(identityId ? { identityId } : {}), ...(action === 'login' && identityId ? { keyEnvelope: vault.wallets.find(w => w.id === identityId)?.keyEnvelope } : {}) };
  });
 }

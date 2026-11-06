@@ -2,7 +2,7 @@ import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { after } from 'next/server';
 import { decodeEventLog, encodeFunctionData, formatEther, getAddress, hashTypedData, isAddress, recoverMessageAddress, recoverTypedDataAddress, zeroAddress, type Address, type Hex, type TransactionReceipt } from 'viem';
-import { withArkiv, StorageError } from '../db.ts';
+import { withState, StorageError } from '../db.ts';
 import { applyAction, VaultError, type Vault } from '../vault.ts';
 import { providers, presenceProvider } from '../integrations/providers.ts';
 import { IntegrationUnavailableError } from '../integrations/contracts.ts';
@@ -34,7 +34,7 @@ const digestOf = (action: string, body: unknown) => createHash('sha256').update(
 /** Durable, idempotent aggregate mutation, mirroring lib/api/service.ts mutate(). */
 async function arkivMutation<T>(action: string, body: unknown, opId: string, identityId: string, change: (vault: Vault) => T, result: (vault: Vault, value: T | undefined) => unknown) {
  const digest = digestOf(action, body);
- return withArkiv(async store => {
+ return withState(async store => {
   const previous = await store.read(), vault = previous.vault;
   const saved = vault.operations.find(o => o.id === opId);
   if (saved && saved.digest !== digest) throw new VaultError('This operation ID was already used with different input.');
@@ -61,13 +61,13 @@ export async function createWhitechainVault(body: Record<string, unknown>, opHea
  if (!name) throw new VaultError('Enter a vault name of at most 120 characters.');
  treasuryConfig();
  const opId = operationId(opHeader);
- const creator = await withArkiv(async store => (await store.read()).vault.wallets.find(w => w.id === creatorId && w.address && w.object_name && w.keyEnvelope));
+ const creator = await withState(async store => (await store.read()).vault.wallets.find(w => w.id === creatorId && w.address && w.object_name && w.keyEnvelope));
  if (!creator) throw new VaultError('Sign in with an encrypted identity to create a vault.');
  const members = Array.isArray(body.addresses) ? body.addresses.map(a => str(a, 100)) : [];
  if (!members.length || members.length > 31 || !members.every(a => isAddress(a))) throw new VaultError('Add 1-31 valid signer addresses.');
  const owners = [getAddress(creator.address!), ...members.map(a => getAddress(a))];
  if (new Set(owners.map(o => o.toLowerCase())).size !== owners.length) throw new VaultError('Each signer address must be unique and different from yours.');
- const already = await withArkiv(async store => (await store.read()).vault.operations.find(o => o.id === opId));
+ const already = await withState(async store => (await store.read()).vault.operations.find(o => o.id === opId));
  if (already && already.digest !== digestOf('whitechain-vault', { name, creatorId, owners })) throw new VaultError('This operation ID was already used with different input.');
  const deployed = already ? null : await deployGuardedSafe(opId, owners);
  return arkivMutation('whitechain-vault', { name, creatorId, owners }, opId, creatorId, vault => {
@@ -105,7 +105,7 @@ export async function startApprovalSession(body: Record<string, unknown>) {
  const proposalId = str(body.proposalId, 100), initiatorId = str(body.initiatorId, 100);
  return withTreasury(async ctx => {
   await reconcileSessions(ctx);
-  const vault = await withArkiv(async store => (await store.read()).vault);
+  const vault = await withState(async store => (await store.read()).vault);
   const proposal = vault.proposals.find(p => p.id === proposalId);
   if (!proposal || proposal.status !== 'pending') throw new VaultError('This proposal is not pending.');
   if (Object.values(ctx.journal.sessions).some(s => s.proposalId === proposalId && (s.status === 'executing' || s.status === 'submitted' || s.status === 'executed' || (s.status === 'failed' && !!s.txHash)))) throw new VaultError('This payout is already executing or executed on Whitechain. It will be recorded shortly.');
@@ -140,7 +140,7 @@ export async function listApprovalSessions(identityId: string) {
  if (!isTreasuryConfigured()) return { sessions: [] };
  return withTreasury(async ctx => {
   await reconcileSessions(ctx);
-  const vault = await withArkiv(async store => (await store.read()).vault);
+  const vault = await withState(async store => (await store.read()).vault);
   if (!vault.wallets.some(w => w.id === identityId)) throw new VaultError('Unknown demo identity.');
   const recent = Date.now() - 15 * 60_000;
   const sessions = Object.values(ctx.journal.sessions).filter(s => vault.groups.find(g => g.id === s.vaultId)?.memberIds.includes(identityId) && (s.status === 'open' || s.status === 'executing' || s.status === 'submitted' || Date.parse(s.createdAt) > recent) && s.status !== 'superseded');
@@ -155,7 +155,7 @@ export async function approveInSession(body: Record<string, unknown>) {
   const session = ctx.journal.sessions[sessionId];
   if (!session || session.status !== 'open') throw new VaultError('This approval session is not open.');
   if (Date.parse(session.expiresAt) <= Date.now()) { session.status = 'expired'; await ctx.save(); throw new VaultError('This approval session has expired. Start a new one together.'); }
-  const vault = await withArkiv(async store => (await store.read()).vault);
+  const vault = await withState(async store => (await store.read()).vault);
   const proposal = vault.proposals.find(p => p.id === session.proposalId);
   if (!proposal || proposal.status !== 'pending') throw new VaultError('This proposal is no longer pending.');
   const { wallet } = memberWallet(vault, session.vaultId, walletId);
@@ -178,7 +178,7 @@ export async function approveInSession(body: Record<string, unknown>) {
   if (!retry) { session.approvals.push({ walletId, address: getAddress(signer), signature, at: new Date().toISOString(), objectMode: object.mode, presenceMode: presence.mode }); delete session.error; }
   await ctx.save();
   if (session.approvals.length >= session.threshold) await finalize(ctx, session);
-  const latest = await withArkiv(async store => (await store.read()).vault);
+  const latest = await withState(async store => (await store.read()).vault);
   return { session: sessionView(session, latest, walletId), ...applicationState(latest, walletId) };
  });
 }
@@ -226,7 +226,7 @@ async function applyReceipt(ctx: Ctx, session: Session, receipt: TransactionRece
 async function recordSession(ctx: Ctx, session: Session) {
  if (session.recorded || !session.txHash || (session.status !== 'executed' && session.status !== 'failed')) return;
  try {
-  const webhook = await withArkiv(async store => {
+  const webhook = await withState(async store => {
    const previous = await store.read(), vault = previous.vault;
    const approverIds = session.approvals.map(a => a.walletId);
    const proposal = recordExecution(vault, { proposalId: session.proposalId, success: session.status === 'executed', txHash: session.txHash!, sessionId: session.id, approverIds, safeTxHash: session.safeTxHash, gasRefund: BigInt(session.gasRefund ?? '0') });
@@ -266,7 +266,7 @@ export async function issueInboxKey(body: Record<string, unknown>) {
  const vaultId = str(body.vaultId, 100), identityId = str(body.identityId, 100), issuedAt = str(body.issuedAt, 40), signature = str(body.signature, 300) as Hex, master = masterKey();
  const age = Date.now() - Date.parse(issuedAt);
  if (!(age >= -60_000 && age <= 300_000)) throw new VaultError('Sign a fresh inbox key request (at most 5 minutes old).');
- const { wallet } = await withArkiv(async store => memberWallet((await store.read()).vault, vaultId, identityId));
+ const { wallet } = await withState(async store => memberWallet((await store.read()).vault, vaultId, identityId));
  // The inbox key is a long-lived credential: require proof from the member's own identity key, not just their ID.
  let signer: Address;
  try { signer = await recoverMessageAddress({ message: inboxKeyMessage(vaultId, identityId, issuedAt), signature }); }
@@ -283,7 +283,7 @@ export class AuthError extends Error {}
 const allowPrivateWebhooks = () => process.env.TICHORI_WEBHOOK_ALLOW_PRIVATE === '1';
 export async function vendorCreateInvoice(authorization: string | null, body: Record<string, unknown>) {
  const vaultId = inboxVault(authorization);
- return withArkiv(async store => {
+ return withState(async store => {
   const previous = await store.read(), vault = previous.vault;
   const { invoice, created } = createInvoice(vault, vaultId, body, { allowPrivateWebhooks: allowPrivateWebhooks() });
   if (created) await store.write(vault, previous);
@@ -292,7 +292,7 @@ export async function vendorCreateInvoice(authorization: string | null, body: Re
 }
 export async function vendorGetInvoice(authorization: string | null, id: string | null) {
  const vaultId = inboxVault(authorization);
- return withArkiv(async store => {
+ return withState(async store => {
   const vault = (await store.read()).vault;
   const invoice = vault.invoices.find(i => i.id === id && i.group_id === vaultId);
   if (!invoice) throw new VaultError('Unknown invoice.');
@@ -301,7 +301,7 @@ export async function vendorGetInvoice(authorization: string | null, id: string 
 }
 export async function vendorRemind(authorization: string | null, body: Record<string, unknown>) {
  const vaultId = inboxVault(authorization);
- return withArkiv(async store => {
+ return withState(async store => {
   const previous = await store.read(), vault = previous.vault;
   const invoice = remindInvoice(vault, vaultId, str(body.id, 100));
   await store.write(vault, previous);
@@ -310,7 +310,7 @@ export async function vendorRemind(authorization: string | null, body: Record<st
 }
 /** Public receipt: invoice IDs are unguessable capability URLs. */
 export async function invoiceReceipt(id: string) {
- return withArkiv(async store => {
+ return withState(async store => {
   const vault = (await store.read()).vault;
   const invoice = vault.invoices.find(i => i.id === id);
   return invoice ? invoiceView(vault, invoice) : null;
@@ -336,7 +336,7 @@ function scheduleWebhook(url: string, vaultId: string, payload: unknown) {
 
 // ---------- Treasury export and gas tank ----------
 export async function treasuryExport(vaultId: string | null, identityId: string | null) {
- return withArkiv(async store => {
+ return withState(async store => {
   const vault = (await store.read()).vault;
   memberWallet(vault, vaultId ?? '', identityId ?? '');
   return { csv: treasuryCsv(vault, vaultId!), filename: `tichori-${whitechainVault(vault, vaultId!).name.replace(/[^\w-]+/g, '-').toLowerCase()}-payouts.csv` };
