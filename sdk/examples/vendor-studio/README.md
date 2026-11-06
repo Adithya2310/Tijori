@@ -9,7 +9,7 @@ verify the signed `invoice.paid` webhook and store the Whitechain payment proof.
 
    ```bash
    TIJORI_URL=http://127.0.0.1:3000 TIJORI_INBOX_KEY=tinbox_... TIJORI_WEBHOOK_SECRET=whsec_... \
-   VENDOR_ADDRESS=0xYourVendorAddress node examples/vendor-studio/server.mjs
+   VENDOR_ADDRESS=0xYourVendorAddress node sdk/examples/vendor-studio/server.mjs
    ```
 3. Open http://127.0.0.1:4100 and send an invoice. It appears in the vault's inbox, where the signers
    propose payment and approve it together. The vendor page flips to **Paid** with the explorer link.

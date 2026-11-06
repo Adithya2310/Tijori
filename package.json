@@ -2,40 +2,34 @@
   "name": "tijori-reference",
   "version": "0.1.0",
   "private": true,
-  "workspaces": [
-    "packages/*",
-    "examples/*"
-  ],
   "scripts": {
-    "dino:prepare": "node --conditions=@tijori/source --experimental-strip-types packages/client/src/cli/prepare-assets.ts public/tijori-assets",
+    "dino:prepare": "tijori-client prepare-assets public/tijori-assets",
     "prebuild": "npm run dino:prepare",
     "predev": "npm run dino:prepare",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --conditions=@tijori/source --experimental-strip-types --test tests/*.test.ts tests/modem.test.mjs tests/network.test.mjs && node --conditions=@tijori/source tests/flow.mjs && node --conditions=@tijori/source tests/local-flow.mjs",
+    "test": "node --test tests/network.test.mjs && node tests/local-flow.mjs",
     "test:contracts": "forge test --root contracts",
-    "test:whitechain": "forge build --root contracts && node --conditions=@tijori/source --experimental-strip-types tests/whitechain-flow.mjs",
     "verify:contracts": "cd contracts && forge verify-contract 0x117919dCBBE5E2Aed227e89dddCa2f68B399B238 src/TichoriPresenceGuard.sol:TichoriPresenceGuard --chain-id 1874 --rpc-url https://rpc.testnet.whitechain.io --verifier blockscout --verifier-url https://explorer.testnet.whitechain.io/api/ --watch && forge verify-contract 0x6905DC2c7c3cA3b2eC97A209f493e949e5bA0e54 src/TichoriSafeSetup.sol:TichoriSafeSetup --chain-id 1874 --rpc-url https://rpc.testnet.whitechain.io --verifier blockscout --verifier-url https://explorer.testnet.whitechain.io/api/ --watch",
-    "arkiv:check": "node --conditions=@tijori/source --experimental-strip-types packages/server/src/cli.ts arkiv check",
-    "arkiv:migrate": "node --conditions=@tijori/source --experimental-strip-types packages/server/src/cli.ts arkiv migrate",
-    "arkiv:verify": "node --conditions=@tijori/source --experimental-strip-types packages/server/src/cli.ts arkiv verify-write",
+    "arkiv:check": "tijori-server arkiv check",
+    "arkiv:migrate": "tijori-server arkiv migrate",
+    "arkiv:verify": "tijori-server arkiv verify-write",
     "dev:https": "node scripts/dev-phone.mjs",
     "dev:phone": "node scripts/dev-phone.mjs",
     "dev:phone:watch": "node scripts/dev-phone.mjs --watch",
-    "build:packages": "tsc -b packages/core packages/server packages/client packages/react && node scripts/postbuild-packages.mjs",
-    "changeset": "changeset",
-    "release": "npm run build:packages && changeset publish"
+    "sdk:build": "npm --prefix sdk run build",
+    "sdk:test": "npm --prefix sdk test",
+    "sdk:test:whitechain": "npm --prefix sdk run test:whitechain",
+    "sdk:try-local": "node scripts/try-local-sdk.mjs"
   },
   "dependencies": {
-    "@anon-rpc/browser-harness": "^0.4.0",
-    "@arkiv-network/sdk": "1.0.1",
     "@fontsource/dm-sans": "^5.3.0",
     "@fontsource/dm-serif-display": "^5.3.0",
-    "@huggingface/transformers": "^4.3.2",
-    "@safe-global/protocol-kit": "^8.0.11",
-    "@safe-global/safe-deployments": "^1.37.67",
+    "@tijori/client": "^0.1.0",
+    "@tijori/react": "^0.1.0",
+    "@tijori/server": "^0.1.0",
     "lucide-react": "^1.69.0",
     "next": "^16.4.5",
     "qrcode.react": "^4.2.0",
@@ -45,14 +39,12 @@
     "viem": "^2.57.16"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.1",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.5",
-    "fake-indexeddb": "^6.2.7",
-    "ggwave": "^0.4.0",
     "typescript": "^6.0.3"
-  }
+  },
+  "description": "The Tijori app: a co-present treasury built entirely on the published @tijori/* npm packages."
 }

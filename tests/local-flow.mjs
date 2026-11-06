@@ -4,6 +4,9 @@ import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+// Integration test of the Tijori app (a merchant of the published @tijori/* packages): a production Next server
+// in local storage mode, its static model assets and the SDK's API routes. Requires `npm run build` first.
+
 const directory = await mkdtemp(join(tmpdir(), 'tijori-local-flow-'));
 const port = 3186, base = `http://127.0.0.1:${port}/api/`;
 const env = { ...process.env, TIJORI_STORAGE_MODE: 'local', LOCAL_DEMO_DATA_DIR: directory, ARKIV_ACCESS_KEY: '', ARKIV_WALLET_PRIVATE_KEY: 'invalid-local-test', ARKIV_MAX_TOTAL_FEE_TGLM: '0' };
@@ -23,6 +26,9 @@ async function start() {
 async function stop() { if (server && server.exitCode === null) { const exited = new Promise(resolve => server.once('exit', resolve)); server.kill('SIGTERM'); await exited; } }
 try {
  await start();
+ // App-only route (LAN phone testing); disabled unless started through `npm run dev:phone`.
+ const network = (await request('network-info')).data;
+ assert.equal(network.enabled, false); assert.deepEqual(network.urls, []);
  const modelPath = 'tijori-assets/models/Xenova/dinov2-small/c2bb04a51fab207c420665f1946016107bffc701/onnx/model.onnx';
  const assetBase = `http://127.0.0.1:${port}/`;
  const modelHead = await fetch(assetBase + modelPath, { method: 'HEAD' });

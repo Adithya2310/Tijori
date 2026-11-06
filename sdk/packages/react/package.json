@@ -5,7 +5,8 @@
   "author": "Tijori contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Adithya2310/Tijori.git"
+    "url": "git+https://github.com/Adithya2310/Tijori.git",
+    "directory": "sdk/packages/react"
   },
   "homepage": "https://github.com/Adithya2310/Tijori#readme",
   "publishConfig": {
@@ -14,16 +15,17 @@
   "engines": {
     "node": ">=22.12"
   },
-  "name": "@tijori/core",
-  "description": "Tijori core: vault schema, Whitechain helpers, object-identity math and shared types (isomorphic).",
+  "name": "@tijori/react",
+  "description": "Tijori React components: object sign-in, Whitechain vaults, co-present approvals, acoustic attendance and the drop-in <TijoriApp/>.",
   "exports": {
     ".": {
       "@tijori/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./styles.css": "./src/styles.css",
     "./*": {
-      "@tijori/source": "./src/*.ts",
+      "@tijori/source": "./src/*.tsx",
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
     }
@@ -32,11 +34,19 @@
     "dist",
     "src",
     "README.md",
-    "LICENSE",
-    "THIRD_PARTY_NOTICES.md"
+    "LICENSE"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "dependencies": {
+    "@tijori/core": "0.1.0",
+    "@tijori/client": "0.1.0",
+    "lucide-react": "^1.69.0"
+  },
   "peerDependencies": {
+    "react": ">=19",
+    "react-dom": ">=19",
     "viem": "^2.57.16"
   }
 }

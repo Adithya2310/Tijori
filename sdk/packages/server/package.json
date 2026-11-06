@@ -5,7 +5,8 @@
   "author": "Tijori contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Adithya2310/Tijori.git"
+    "url": "git+https://github.com/Adithya2310/Tijori.git",
+    "directory": "sdk/packages/server"
   },
   "homepage": "https://github.com/Adithya2310/Tijori#readme",
   "publishConfig": {

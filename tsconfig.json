@@ -25,36 +25,8 @@
     "paths": {
       "@/*": [
         "./*"
-      ],
-      "@tijori/core": [
-        "./packages/core/src/index.ts"
-      ],
-      "@tijori/core/*": [
-        "./packages/core/src/*"
-      ],
-      "@tijori/server": [
-        "./packages/server/src/index.ts"
-      ],
-      "@tijori/server/*": [
-        "./packages/server/src/*"
-      ],
-      "@tijori/client": [
-        "./packages/client/src/index.ts"
-      ],
-      "@tijori/client/*": [
-        "./packages/client/src/*"
-      ],
-      "@tijori/react": [
-        "./packages/react/src/index.ts"
-      ],
-      "@tijori/react/*": [
-        "./packages/react/src/*"
       ]
-    },
-    "allowImportingTsExtensions": true,
-    "customConditions": [
-      "@tijori/source"
-    ]
+    }
   },
   "include": [
     "next-env.d.ts",
@@ -70,9 +42,6 @@
   "exclude": [
     "node_modules",
     "contracts",
-    "packages/*/dist",
-    "examples/*/node_modules",
-    "examples/*/.next",
-    "examples"
+    "sdk"
   ]
 }

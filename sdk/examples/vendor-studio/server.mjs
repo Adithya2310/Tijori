@@ -1,6 +1,6 @@
 // Priya Studio: a separate vendor app that bills a Tijori treasury in USDT on Whitechain.
 // Run: TIJORI_URL=http://127.0.0.1:3000 TIJORI_INBOX_KEY=... TIJORI_WEBHOOK_SECRET=... \
-//      VENDOR_ADDRESS=0x... node examples/vendor-studio/server.mjs   (then open http://127.0.0.1:4100)
+//      VENDOR_ADDRESS=0x... node sdk/examples/vendor-studio/server.mjs   (then open http://127.0.0.1:4100)
 import { createServer } from 'node:http';
 const invoices = new Map(); // your app's own database
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);

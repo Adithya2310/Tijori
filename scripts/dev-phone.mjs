@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createServer } from 'node:net';
@@ -15,7 +16,9 @@ await new Promise((resolveReady,reject) => {
 
 const addresses = lanAddresses();
 // Prepare the pinned on-device model assets (resumable, checksum-verified).
-if (spawnSync(process.execPath, ['--conditions=@tijori/source', '--experimental-strip-types', 'packages/client/src/cli/prepare-assets.ts', 'public/tijori-assets'], { stdio: 'inherit' }).status !== 0) throw Error('Model asset preparation failed. Run it again to resume.');
+// Uses the CLI shipped in the installed @tijori/client package, like any integrator.
+const prepareAssets = fileURLToPath(import.meta.resolve('@tijori/client/cli/prepare-assets'));
+if (spawnSync(process.execPath, [prepareAssets, 'public/tijori-assets'], { stdio: 'inherit' }).status !== 0) throw Error('Model asset preparation failed. Run it again to resume.');
 const directory = resolve('.local-https');
 mkdirSync(directory,{recursive:true,mode:0o700});
 const key = resolve(directory,'key.pem'), cert = resolve(directory,'cert.pem');

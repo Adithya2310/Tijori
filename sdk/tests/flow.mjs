@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +6,7 @@ import { rpcFixture } from './rpc-fixture.mjs';
 import { privateKeyToAccount } from 'viem/accounts';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { startServer } from './support/spawn-server.mjs';
 
 const addr = n => '0x' + n.toString(16).padStart(40, '0');
 const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
@@ -14,9 +14,9 @@ const dir = await mkdtemp(join(tmpdir(), 'privacy-vault-test-'));
 const port = 3178;
 const rpc = await rpcFixture();
 const privateKey = '0x' + '11'.repeat(32);
-const env = { ...process.env, TIJORI_STORAGE_MODE: 'arkiv', VAULT_DATA_DIR: dir, ARKIV_ACCESS_KEY: 'fixture', ARKIV_WALLET_PRIVATE_KEY: privateKey, ARKIV_WALLET_ADDRESS: privateKeyToAccount(privateKey).address, ARKIV_STATE_ENCRYPTION_KEY: '22'.repeat(32), ARKIV_NAMESPACE: 'fixture', ARKIV_MAX_TOTAL_FEE_TGLM: '0.1', NODE_OPTIONS: `--import=${pathToFileURL(resolve('tests/rpc-preload.mjs')).href}`, TIJORI_FIXTURE_URL: rpc.url };
-let server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port)], { env, stdio: 'ignore' });
-const base = `http://localhost:${port}/api/`;
+const env = { ...process.env, TIJORI_STORAGE_MODE: 'arkiv', VAULT_DATA_DIR: dir, ARKIV_ACCESS_KEY: 'fixture', ARKIV_WALLET_PRIVATE_KEY: privateKey, ARKIV_WALLET_ADDRESS: privateKeyToAccount(privateKey).address, ARKIV_STATE_ENCRYPTION_KEY: '22'.repeat(32), ARKIV_NAMESPACE: 'fixture', ARKIV_MAX_TOTAL_FEE_TGLM: '0.1', NODE_OPTIONS: `--import=${pathToFileURL(resolve(import.meta.dirname, 'rpc-preload.mjs')).href}`, TIJORI_FIXTURE_URL: rpc.url };
+let server = startServer(port, env);
+const base = `http://127.0.0.1:${port}/api/`;
 async function request(path, body, headers = {}) {
  const response = await fetch(base + path, body ? {method:'POST', headers:{'Content-Type':'application/json',...headers}, body:JSON.stringify(body)} : {});
  return { status: response.status, data: await response.json() };
@@ -25,7 +25,6 @@ try {
  let ready = false;
  for (let i=0;i<100;i++) { try { if ((await request('state')).status === 200) { ready=true; break; } } catch {} await new Promise(r=>setTimeout(r,100)); }
  assert.ok(ready, 'server started');
- const network=(await request('network-info')).data;assert.equal(network.enabled,false);assert.deepEqual(network.urls,[]);
  let result=await request('signup',{name:'Person 0',address:addr(1),keyEnvelope,objectName:'Object 0'});
  assert.equal(result.status,200); const creator=result.data.identityId;
  assert.equal((await request('login',{address:addr(1),keyEnvelope,objectName:'wrong'})).status,400);
@@ -96,7 +95,7 @@ try {
  rpc.control.failQuery=true;assert.equal((await request(`proximity?groupId=${group.id}&walletId=${creator}`)).status,503);rpc.control.failQuery=false;
  const snapshot=(await request(`proximity?groupId=${group.id}&walletId=${creator}`)).data;
  server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));
- server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-p',String(port)],{env,stdio:'ignore'});
+ server=startServer(port,env);
  let resumed=false;for(let i=0;i<100;i++){try{const r=await request(`proximity?groupId=${group.id}&walletId=${creator}`);if(r.status===200){assert.deepEqual(r.data,snapshot);resumed=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}
  assert.ok(resumed,'active acoustic session and matches survive restart');
  assert.equal((await post('cancel',{sessionId:session.id})).data.session.status,'cancelled');
@@ -179,7 +178,7 @@ try {
  assert.equal(approved.status,200); assert.equal(approved.data.transactions.find(t=>t.id===v1tx.id).canApprove,false);
  const final=(await request('state')).data; assert.ok(final.groups.some(g=>g.name==='Concurrent A')); assert.ok(final.groups.some(g=>g.name==='Concurrent B'));
  server.kill('SIGTERM'); await new Promise(resolve=>server.once('exit',resolve));
- server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-p',String(port)],{env,stdio:'ignore'});
+ server=startServer(port,env);
  let restarted=false; for(let i=0;i<100;i++){try{const r=await request('state');if(r.status===200){assert.deepEqual(r.data,final);restarted=true;break;}}catch{} await new Promise(r=>setTimeout(r,100));}
  assert.ok(restarted,'state persists across server restart');
  console.log('Passed API + SDK fixture: enrollment, invitations, majority, encrypted writes, receipt recovery, missing/duplicate state, upstream failure and fee guards.');

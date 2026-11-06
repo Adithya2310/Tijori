@@ -23,5 +23,7 @@ skills-lock.json
 whitechain.md
 
 # Built SDK packages
-packages/*/dist/
-packages/*/.tsbuildinfo
+sdk/packages/*/dist/
+sdk/packages/*/.tsbuildinfo
+# Local SDK tarballs installed by `npm run sdk:try-local`
+.sdk-local/

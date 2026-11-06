@@ -1,8 +1,9 @@
-// End-to-end: production Next server + local anvil chain (id 1874) carrying the canonical Safe 1.4.1
+// End-to-end: the local @tijori/server source (tests/support/serve.mjs) + local anvil chain (id 1874) carrying the canonical Safe 1.4.1
 // bytecode and a mock USDT at the canonical address, plus the Arkiv RPC fixture. No testnet funds.
-// Requires Foundry (anvil) and `npm run build` + `forge build` (see package.json "test:whitechain").
+// Requires Foundry (anvil) and `forge build --root ../contracts` (see sdk/package.json "test:whitechain").
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import { startServer } from './support/spawn-server.mjs';
 import { createServer } from 'node:http';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -17,8 +18,9 @@ import { verifyWebhook } from '@tijori/invoices';
 
 if (spawnSync('anvil', ['--version']).error) { console.log('Skipped Whitechain flow: Foundry anvil is not installed.'); process.exit(0); }
 const USDT = '0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7';
-const artifact = async name => JSON.parse(await readFile(`contracts/out/${name}.sol/${name}.json`, 'utf8'));
-const safeFixture = JSON.parse(await readFile('contracts/test/fixtures/safe-1.4.1.json', 'utf8'));
+const contracts = new URL('../../contracts/', import.meta.url);
+const artifact = async name => JSON.parse(await readFile(new URL(`out/${name}.sol/${name}.json`, contracts), 'utf8'));
+const safeFixture = JSON.parse(await readFile(new URL('test/fixtures/safe-1.4.1.json', contracts), 'utf8'));
 const anvilPort = 8645, appPort = 3179;
 const anvil = spawn('anvil', ['--chain-id', '1874', '--port', String(anvilPort), '--silent'], { stdio: 'ignore' });
 const dir = await mkdtemp(join(tmpdir(), 'tijori-whitechain-test-'));
@@ -46,8 +48,8 @@ try {
  const privateKey = '0x' + '11'.repeat(32);
  const env = { ...process.env, VAULT_DATA_DIR: dir, ARKIV_ACCESS_KEY: 'fixture', ARKIV_WALLET_PRIVATE_KEY: privateKey, ARKIV_WALLET_ADDRESS: privateKeyToAccount(privateKey).address, ARKIV_STATE_ENCRYPTION_KEY: '22'.repeat(32), ARKIV_NAMESPACE: 'fixture', ARKIV_MAX_TOTAL_FEE_TGLM: '0.1', NODE_OPTIONS: `--import=${pathToFileURL(resolve('tests/rpc-preload.mjs')).href}`, TIJORI_FIXTURE_URL: rpc.url,
   WHITECHAIN_RPC_URL: chainUrl, WHITECHAIN_RELAYER_PRIVATE_KEY: relayerKey, TIJORI_VERIFIER_PRIVATE_KEY: verifierKey, TIJORI_GUARD_ADDRESS: guard, TIJORI_SAFE_SETUP_ADDRESS: setup, TIJORI_API_MASTER_KEY: '33'.repeat(32), TIJORI_WEBHOOK_ALLOW_PRIVATE: '1' };
- server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(appPort)], { env, stdio: 'ignore' });
- const base = `http://localhost:${appPort}/api/v1/`;
+ server = startServer(appPort, env);
+ const base = `http://127.0.0.1:${appPort}/api/v1/`;
  const call = async (path, body, headers = {}) => { const r = await fetch(base + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) } : { headers }); const text = await r.text(); let data; try { data = JSON.parse(text); } catch { data = text; } return { status: r.status, data }; };
  for (let i = 0; i < 150; i++) { try { if ((await call('capabilities')).status === 200) break; } catch {} await new Promise(r => setTimeout(r, 100)); }
  assert.equal((await call('capabilities')).data.whitechain.configured, true);

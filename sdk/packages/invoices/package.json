@@ -26,7 +26,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Adithya2310/Tijori.git"
+    "url": "git+https://github.com/Adithya2310/Tijori.git",
+    "directory": "sdk/packages/invoices"
   },
   "author": "Tijori contributors"
 }

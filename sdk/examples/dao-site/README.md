@@ -8,9 +8,10 @@ A separate Next.js app that adds the Tijori treasury to a DAO website with the p
 - `app/invoice/[id]/page.tsx`: public invoice receipts.
 
 ```sh
-npm install                    # from the repository root (npm workspaces)
-npm run build:packages         # the example consumes the built packages, like an npm install would
+cd sdk
+npm install                        # the SDK workspace (links the local packages)
+npm run build                      # the example consumes the built packages, like an npm install would
 npm run dev -w examples/dao-site   # prepares model assets, then http://127.0.0.1:3200
 ```
 
-Without Whitechain settings, the site offers acoustic groups. To enable gasless Whitechain vaults, add the `WHITECHAIN_*` and `TIJORI_*` settings from the repository's `.env.example` to `examples/dao-site/.env.local`. Data is stored in `examples/dao-site/data/` (git-ignored). Demo only: testnet tokens, no real funds.
+Without Whitechain settings, the site offers acoustic groups. To enable gasless Whitechain vaults, add the `WHITECHAIN_*` and `TIJORI_*` settings from the repository's `.env.example` to `sdk/examples/dao-site/.env.local`. Data is stored in `sdk/examples/dao-site/data/` (git-ignored). Demo only: testnet tokens, no real funds.

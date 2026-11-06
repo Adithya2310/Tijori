@@ -5,7 +5,8 @@
   "author": "Tijori contributors",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Adithya2310/Tijori.git"
+    "url": "git+https://github.com/Adithya2310/Tijori.git",
+    "directory": "sdk/packages/client"
   },
   "homepage": "https://github.com/Adithya2310/Tijori#readme",
   "publishConfig": {
@@ -14,38 +15,41 @@
   "engines": {
     "node": ">=22.12"
   },
-  "name": "@tijori/react",
-  "description": "Tijori React components: object sign-in, Whitechain vaults, co-present approvals, acoustic attendance and the drop-in <TijoriApp/>.",
+  "name": "@tijori/client",
+  "description": "Tijori browser SDK: API client, on-device object identity (DINOv2), acoustic proof of attendance and Whitechain approval signing.",
   "exports": {
     ".": {
       "@tijori/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./styles.css": "./src/styles.css",
     "./*": {
-      "@tijori/source": "./src/*.tsx",
+      "@tijori/source": "./src/*.ts",
       "types": "./dist/*.d.ts",
       "default": "./dist/*.js"
     }
   },
+  "bin": {
+    "tijori-client": "./dist/cli/prepare-assets.js"
+  },
   "files": [
     "dist",
     "src",
+    "licenses",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
-  "sideEffects": [
-    "**/*.css"
-  ],
+  "sideEffects": false,
   "dependencies": {
     "@tijori/core": "0.1.0",
-    "@tijori/client": "0.1.0",
-    "lucide-react": "^1.69.0"
+    "@huggingface/transformers": "4.3.2",
+    "@anon-rpc/browser-harness": "^0.4.0"
   },
   "peerDependencies": {
-    "react": ">=19",
-    "react-dom": ">=19",
     "viem": "^2.57.16"
+  },
+  "scripts": {
+    "vendor:ggwave": "node scripts/vendor-ggwave.mjs"
   }
 }
