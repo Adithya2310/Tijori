@@ -1,5 +1,9 @@
 # Tichori contributor guide
 
+## UI redesign branch: cosmetic reuse only
+
+For `codex/ui-redesign` and any future port of its design, read [docs/UI_REDESIGN_HANDOFF.md](docs/UI_REDESIGN_HANDOFF.md) before editing or transferring files. This branch is a visual reference only: reuse branding, layouts, styles, illustration components, and decorative motion while preserving the destination branch's functionality and current contributor instructions. Do not merge/cherry-pick the branch wholesale or replace destination controllers, routes, identity/matching flows, APIs, storage, signing, or approval logic with this branch's older implementation. Mixed UI/behavior files require selective adaptation, as listed in the handoff. This instruction does not authorize functional changes or a push/deployment.
+
 ## Product and current scope
 Tichori is a local Next.js prototype for address-based demo identities and group transaction approvals. Object matching uses a browser-side DINOv2 experiment; its check is bypassable and is not authentication or secure recovery. Legacy demo transfers remain simulations. Group acoustic matching uses real ggwave WASM and opt-in browser microphone access; it is a cooperative demo, not proof of physical proximity or identity. Active challenges can be replayed or relayed. Acoustic Send starts a check only and never creates, signs or authorizes a transfer. New vaults deploy Safe multisig contracts on Base Sepolia through an explicitly connected user wallet; on-chain transfers and signatures are handled by the Safe app. Vault metadata is verified and stored through the encrypted Arkiv Rabdi adapter. Never describe a mock as a security guarantee. Do not use real funds or sensitive information.
 
@@ -10,7 +14,7 @@ Tichori is a local Next.js prototype for address-based demo identities and group
 Use Node.js 22.20 or later, then `npm install`. Configure server-only Arkiv credentials, an independent state encryption key and explicit cumulative fee allowance using `.env.example`. Follow README.md, run `npm run arkiv:check`, and run `npm run arkiv:migrate` before first signup to import an existing SQLite demo. Start with `npm run dev -- --hostname 127.0.0.1` and open http://localhost:3000. SQLite is only a read-only migration source. Do not delete Arkiv journals to reset state or spending limits. The server needs a writable persistent filesystem; this setup is not suitable for stateless/serverless deployment.
 
 ## Structure and contracts
-- `app/page.tsx`: client sign-up/login, dashboard, Safe deployment, legacy demo approvals and separate acoustic group creation/checks.
+- On this design preview, `app/page.tsx` is the landing page; `app/components/TijoriApp.tsx` contains the older client signup/login and dashboard controller, with `/app`, `/signup`, and `/login` route wrappers. This arrangement is preview-specific, not a routing requirement for destination branches. See the UI handoff before reusing presentation from these mixed files.
 - `app/components/ProximityCheck.tsx`: two-minute acoustic broadcast/listen dialog, non-overlapping read-only polling, local expiry clock and audio cleanup.
 - `app/api/proximity/route.ts` and `lib/proximity.ts`: declared membership, session start/status/verify/cancel, unique challenges, idempotent starts/matches/stops. All mutations use the shared Arkiv lock and encrypted aggregate; polling never writes. Storage failures return 503.
 - `scripts/dev-phone.mjs`, `app/components/PhoneAccess.tsx` and `/api/network-info`: opt-in HTTPS LAN testing and QR links. Phone launchers use isolated Next build directories and the same Arkiv namespace/journal. Certificates remain local/ignored; users handle browser certificate warnings.
