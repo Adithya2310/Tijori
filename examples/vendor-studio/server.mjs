@@ -11,7 +11,7 @@ const page = () => `<!doctype html><meta charset="utf-8"><title>Priya Studio · 
 <table>${[...invoices.values()].reverse().map(i => `<tr><td>${esc(i.memo)}</td><td>${esc(i.amount)} USDT</td><td>due ${esc(i.dueDate)}</td><td class="${esc(i.status)}">${i.status === 'paid' ? `Paid · <a href="${esc(i.payment.explorerUrl)}">Whitechain tx</a>` : 'Awaiting DAO'}</td><td><a href="${esc(i.receiptUrl)}">receipt</a></td></tr>`).join('')}</table>`;
 
 // ---- Tichori integration (the whole thing) -------------------------------------------------
-import { createInvoiceClient, verifyWebhook } from '../../packages/tichori-invoices/index.mjs';
+import { createInvoiceClient, verifyWebhook } from '@tijori/invoices';
 const tichori = createInvoiceClient({ baseUrl: process.env.TICHORI_URL, inboxKey: process.env.TICHORI_INBOX_KEY });
 async function bill({ memo, amount, due }) {
  const invoice = await tichori.create({ vendorName: 'Priya Studio', vendorAddress: process.env.VENDOR_ADDRESS, amount, memo, dueDate: due,

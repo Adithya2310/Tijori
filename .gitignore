@@ -20,3 +20,6 @@ public/dino-assets/
 .claude/skills/whitechain-dev
 skills-lock.json
 whitechain.md
+
+# Built SDK packages
+packages/*/dist/

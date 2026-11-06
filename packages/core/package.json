@@ -1,0 +1,42 @@
+{
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "author": "Tijori contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Adithya2310/Tijori.git"
+  },
+  "homepage": "https://github.com/Adithya2310/Tijori#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "name": "@tijori/core",
+  "description": "Tijori core: vault schema, Whitechain helpers, object-identity math and shared types (isomorphic).",
+  "exports": {
+    ".": {
+      "@tijori/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "@tijori/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "viem": "^2.57.16"
+  }
+}

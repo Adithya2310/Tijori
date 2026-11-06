@@ -1,0 +1,71 @@
+{
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "author": "Tijori contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Adithya2310/Tijori.git"
+  },
+  "homepage": "https://github.com/Adithya2310/Tijori#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "name": "@tijori/server",
+  "description": "Self-hosted Tijori backend: co-present Whitechain treasury, object identities and acoustic attendance as a fetch handler with Next.js and Node adapters.",
+  "exports": {
+    ".": {
+      "browser": "./dist/browser-guard.js",
+      "@tijori/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./next": {
+      "browser": "./dist/browser-guard.js",
+      "@tijori/source": "./src/next.ts",
+      "types": "./dist/next.d.ts",
+      "default": "./dist/next.js"
+    },
+    "./node": {
+      "browser": "./dist/browser-guard.js",
+      "@tijori/source": "./src/node.ts",
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./*": {
+      "browser": "./dist/browser-guard.js",
+      "@tijori/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "bin": {
+    "tijori-server": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@tijori/core": "0.0.0",
+    "@arkiv-network/sdk": "1.0.1",
+    "@safe-global/protocol-kit": "^8.0.11",
+    "@safe-global/safe-deployments": "^1.37.67"
+  },
+  "peerDependencies": {
+    "viem": "^2.57.16",
+    "next": ">=15"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  }
+}

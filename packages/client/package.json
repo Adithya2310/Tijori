@@ -1,0 +1,51 @@
+{
+  "version": "0.0.0",
+  "type": "module",
+  "license": "MIT",
+  "author": "Tijori contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Adithya2310/Tijori.git"
+  },
+  "homepage": "https://github.com/Adithya2310/Tijori#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "name": "@tijori/client",
+  "description": "Tijori browser SDK: API client, on-device object identity (DINOv2), acoustic proof of attendance and Whitechain approval signing.",
+  "exports": {
+    ".": {
+      "@tijori/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "@tijori/source": "./src/*.ts",
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "bin": {
+    "tijori-client": "./dist/cli/prepare-assets.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "licenses",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "dependencies": {
+    "@tijori/core": "0.0.0",
+    "@huggingface/transformers": "4.3.2",
+    "@anon-rpc/browser-harness": "^0.4.0"
+  },
+  "peerDependencies": {
+    "viem": "^2.57.16"
+  }
+}

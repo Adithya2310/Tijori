@@ -1,7 +1,11 @@
 {
-  "name": "tichori",
+  "name": "tijori-reference",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
   "scripts": {
     "dino:prepare": "node --experimental-strip-types scripts/prepare-dino-assets.mjs",
     "prebuild": "npm run dino:prepare",
@@ -19,7 +23,10 @@
     "arkiv:verify": "node --experimental-strip-types scripts/arkiv.ts verify-write",
     "dev:https": "node scripts/dev-phone.mjs",
     "dev:phone": "node scripts/dev-phone.mjs",
-    "dev:phone:watch": "node scripts/dev-phone.mjs --watch"
+    "dev:phone:watch": "node scripts/dev-phone.mjs --watch",
+    "build:packages": "tsc -b packages/core packages/server packages/client packages/react && node scripts/postbuild-packages.mjs",
+    "changeset": "changeset",
+    "release": "npm run build:packages && changeset publish"
   },
   "dependencies": {
     "@anon-rpc/browser-harness": "^0.4.0",
@@ -39,6 +46,7 @@
     "viem": "^2.57.16"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.1",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

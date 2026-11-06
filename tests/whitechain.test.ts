@@ -7,7 +7,7 @@ import { formatUsdt, parseUsdt } from '../lib/whitechain/chain.ts';
 import { createInvoice, createProposal, recordExecution, remindInvoice, treasuryCsv } from '../lib/whitechain/domain.ts';
 import { deriveMasterKey, inboxKeyFor, signWebhook, verifyInboxKey, webhookSecretFor } from '../lib/whitechain/keys.ts';
 import { attestationTypedData, packSignatures, safeTxTypedData, sortAddresses } from '../lib/whitechain/safe-tx.ts';
-import { verifyWebhook } from '../packages/tichori-invoices/index.mjs';
+import { verifyWebhook } from '@tijori/invoices';
 
 const addr = (n: number) => '0x' + n.toString(16).padStart(40, '0');
 const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
