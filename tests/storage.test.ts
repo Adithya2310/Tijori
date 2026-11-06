@@ -36,7 +36,8 @@ test('migrates legacy state and binds a verified Safe to its signer identities',
  const { normalizeOwners, validateSalt, verifySafeDeployment } = await import('../lib/safe.ts');
  const legacy = { version: 1, wallets: [], groups: [], transactions: [], operations: [] };
  const vault = validateVault(legacy);
- assert.equal(vault.version, 3);
+ assert.equal(vault.version, 4);
+ assert.deepEqual([vault.proposals, vault.invoices], [[], []]);
  const creator = applyAction(vault, 'signup', { name: 'Creator', address: addr(9), keyEnvelope, objectName: 'demo' });
  const owners = normalizeOwners(['0x1111111111111111111111111111111111111111', '0x2222222222222222222222222222222222222222', '0x3333333333333333333333333333333333333333']);
  const safe = { chainId: 84532 as const, address: '0x4444444444444444444444444444444444444444' as const, owners, threshold: 2, deploymentTxHash: `0x${'aa'.repeat(32)}` as `0x${string}`, saltNonce: '10' };

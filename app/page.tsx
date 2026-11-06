@@ -10,7 +10,7 @@ type Data=ApplicationState;
 type Group=Data['groups'][number];
 type Tx=ApiTransaction;
 type Modal='group'|'send'|'receive'|'details'|null;
-const empty:Data={wallets:[],groups:[],transactions:[]};
+const empty:Data={wallets:[],groups:[],transactions:[],proposals:[],invoices:[]};
 const short=(s:string)=>s.length>24?`${s.slice(0,12)}…${s.slice(-7)}`:s;
 
 export default function Home(){

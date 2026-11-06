@@ -29,6 +29,8 @@ export function applicationState(vault: Vault, identityId?: string) {
    const group = groups.find(g => g.id === t.group_id)!;
    return { ...t, requiredApprovals: requiredApprovals(group.members.length), canApprove: !group.safe && t.status === 'pending' && !t.approvals.some(a => a.id === identityId) };
   }),
+  proposals: state.proposals.filter(p => visible.has(p.group_id)),
+  invoices: state.invoices.filter(i => visible.has(i.group_id)),
  };
 }
 export async function verifyObject(vault: Vault, body: Record<string, unknown>, integrations: IntegrationProviders) {
