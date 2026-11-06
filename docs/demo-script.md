@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | 0:00 | **Problem** | "Treasuries get drained when one key or one remote signer is enough. Tijori: money moves only when a majority is together in one room, each person showing their personal object." |
 | 0:15 | **Vault** | Builders DAO in Tijori: 10,000 USDT on Whitechain, 3 of 5 to pay, *Presence guard active*. Click the explorer link: a Safe with the guard installed at creation. It was created gaslessly, with no wallet. |
-| 0:35 | **Vendor bills the DAO** | Priya Studio app: fill in "Website redesign, 500 USDT, due Nov 20" and send. Show the ~20-line SDK block in `examples/vendor-studio/server.mjs`. |
+| 0:35 | **Vendor bills the DAO** | Priya Studio app: fill in "Website redesign, 500 USDT, due Nov 20" and send. Show the ~20-line SDK block in `sdk/examples/vendor-studio/server.mjs`. |
 | 0:55 | **Inbox and proposal** | In Tijori the invoice appears in the inbox. Asha clicks **Propose payment**. |
 | 1:05 | **Together in the room** | Asha taps **Start approval session**. Her device emits the room code (ultrasound; a simulated code in this build). Ben and Chen open Tijori, show their objects, tap **Approve together**. The counter goes 1 → 2 → 3 of 3. |
 | 1:40 | **Paid on Whitechain** | Toast: *Paid 500 USDT*. On the explorer: the USDT transfer to Priya, the `CoPresentExecution` event (session, approvers) and the USDT gas refund to the relayer. The signers saw no gas, no wallet and no chain name. |

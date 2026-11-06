@@ -6,25 +6,25 @@ This is an integration scaffold for the local prototype. Object matching and phy
 
 ```text
 Tijori UI / another local app
-    -> @tijori/client createTijoriClient() (packages/client/src/api.ts, optional typed HTTP client)
+    -> @tijori/client createTijoriClient() (sdk/packages/client/src/api.ts, optional typed HTTP client)
     -> /api/v1/* (app/api/[...path]/route.ts)
-    -> packages/server/src/handler.ts (routing, limits, origin check) via createTijoriServer()
-    -> packages/server/src/services/service.ts (orchestration, durable writes, retry handling)
-    -> packages/core/src/api/domain.ts (workflow checks and response presentation)
-    -> packages/server/src/providers.ts (replaceable server-side implementations)
-    -> packages/core/src/vault.ts / the configured storage adapter (encrypted Arkiv store by default)
+    -> sdk/packages/server/src/handler.ts (routing, limits, origin check) via createTijoriServer()
+    -> sdk/packages/server/src/services/service.ts (orchestration, durable writes, retry handling)
+    -> sdk/packages/core/src/api/domain.ts (workflow checks and response presentation)
+    -> sdk/packages/server/src/providers.ts (replaceable server-side implementations)
+    -> sdk/packages/core/src/vault.ts / the configured storage adapter (encrypted Arkiv store by default)
 ```
 
 All existing unversioned API routes remain available and use the same integrated service. This branch uses the additive v5 object-profile schema migration described in README.md; all versioned and legacy mutations use the same selected storage adapter. Existing locks, fee reservations, signed journals, fail-closed recovery and the last 100 successful mutation keys remain in use.
 
 | Workstream | Contract to implement | Wiring location |
 | --- | --- | --- |
-| Object matching | `ObjectMatchingProvider.enroll` and `.verify` | `packages/server/src/providers.ts` |
-| Physical discovery and approval | `PhysicalApprovalProvider.discover` and `.verify` | `packages/server/src/providers.ts` |
-| Existing vault / DAO approval | `ExternalVaultProvider.verifyApproval` | `packages/server/src/providers.ts` |
+| Object matching | `ObjectMatchingProvider.enroll` and `.verify` | `sdk/packages/server/src/providers.ts` |
+| Physical discovery and approval | `PhysicalApprovalProvider.discover` and `.verify` | `sdk/packages/server/src/providers.ts` |
+| Existing vault / DAO approval | `ExternalVaultProvider.verifyApproval` | `sdk/packages/server/src/providers.ts` |
 | Camera/audio capture and wallet access | Client/device capture code; submit evidence references through the API client | Consuming application |
 
-Provider interfaces are in `packages/core/src/integrations.ts`. Implement each provider in its own server module and pass it as `createTijoriServer({ providers: { objectMatching, … } })`. Selection is server controlled; requests cannot select a provider, enable live mode or submit `accepted: true` as a trusted result. Keep credentials in server-only modules. Return `{ accepted, mode, provider }`; report the actual mode honestly. Throw on unavailable verification rather than falling back to the demo implementation. Change `configured` only when the external adapter is ready.
+Provider interfaces are in `sdk/packages/core/src/integrations.ts`. Implement each provider in its own server module and pass it as `createTijoriServer({ providers: { objectMatching, … } })`. Selection is server controlled; requests cannot select a provider, enable live mode or submit `accepted: true` as a trusted result. Keep credentials in server-only modules. Return `{ accepted, mode, provider }`; report the actual mode honestly. Throw on unavailable verification rather than falling back to the demo implementation. Change `configured` only when the external adapter is ready.
 
 Providers must independently verify reference ownership, authenticated actor, application scope, challenge freshness, replay protection and transaction binding. The current demo does not implement those mechanisms. A matching result is not an authentication session. Frequency matching is not proof of proximity. A physical approval result is not a wallet signature.
 
@@ -66,7 +66,7 @@ The legacy routes retain their full-state response shape. The versioned routes s
 
 ## Consuming from another application
 
-Use `createTijoriClient` from `@tijori/client` (source: `packages/client/src/api.ts`). Its request and response types come from `@tijori/core/api/types`, which the server handlers are also annotated with. For a trusted local server, supply an absolute base URL; browser writes currently require the same origin.
+Use `createTijoriClient` from `@tijori/client` (source: `sdk/packages/client/src/api.ts`). Its request and response types come from `@tijori/core/api/types`, which the server handlers are also annotated with. For a trusted local server, supply an absolute base URL; browser writes currently require the same origin.
 
 ```ts
 import { createTijoriClient } from '@tijori/client';

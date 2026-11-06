@@ -103,7 +103,7 @@ export default async function Receipt({ params }: { params: Promise<{ id: string
 }
 ```
 
-[`examples/dao-site`](../examples/dao-site) is a complete, runnable version of this setup.
+[`sdk/examples/dao-site`](../examples/dao-site) is a complete, runnable version of this setup.
 
 ## 3b. Express or plain Node
 

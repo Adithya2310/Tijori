@@ -2,15 +2,37 @@
 
 A local prototype for demo identities and shared treasuries. New vaults are presence-guarded Safe multisig treasuries on **Whitechain Sepolia, chain 1874**, holding USDT; vaults created earlier on Base Sepolia (84532) stay readable. Vault metadata and existing demo records persist in an encrypted Arkiv entity on **Rabdi, chain 7794095**, using `@arkiv-network/sdk` 1.0.1. SQLite is used only by the explicit, one-time migration command.
 
-## Use Tijori in your own app (SDK)
+## This app is a Tijori SDK merchant
 
-The app is also published as npm packages:
+The Tijori app in this repository uses the published [`@tijori/*` npm packages](https://www.npmjs.com/org/tijori) like any other integrator. It installs them from the registry and uses no local source.
+
+```jsonc
+// package.json
+"@tijori/server": "^0.1.0", "@tijori/client": "^0.1.0", "@tijori/react": "^0.1.0"
+```
+
+| File | The whole integration |
+|---|---|
+| [`lib/tijori.ts`](lib/tijori.ts) | `export const tijori = createTijoriServer({ ...fromEnv(), basePath: '/api' })` |
+| [`app/api/[...path]/route.ts`](app/api/%5B...path%5D/route.ts) | `export const { GET, POST, HEAD } = toNextHandlers(tijori)` |
+| [`app/page.tsx`](app/page.tsx) | `<TijoriProvider baseUrl="/api/v1"><TijoriApp … /></TijoriProvider>` |
+| [`app/layout.tsx`](app/layout.tsx) | `import '@tijori/react/styles.css'` |
+| `package.json` | `"prebuild": "tijori-client prepare-assets public/tijori-assets"` |
+
+Everything else is app-specific and plugs into `<TijoriApp/>` slots:
+- [`app/legacy.tsx`](app/legacy.tsx): passphrase identities, Base Sepolia Safes and simulated transfers.
+- [`PhoneAccess`](app/components/PhoneAccess.tsx): LAN phone testing.
+- The Anon RPC diagnostic.
+
+The SDK is developed in [`sdk/`](sdk). It has its own install, tests, examples and releases, and its changes reach this app only as a new npm version. To try unreleased SDK changes in the app, run `npm run sdk:try-local`, then `npm ci` to go back.
+
+### Use Tijori in your own app
 - `@tijori/server`: a self-hosted backend.
 - `@tijori/client`: browser building blocks.
 - `@tijori/react`: a drop-in `<TijoriApp/>` and composable components.
 - `@tijori/invoices`: an SDK for vendors billing a vault.
 
-A DAO site or marketplace can add object sign-in, gasless Whitechain vaults with co-present approvals, and acoustic attendance with one backend route and one component. See [docs/SDK.md](docs/SDK.md) and the runnable [examples/dao-site](examples/dao-site). This reference app is built from the same packages (`lib/tijori.ts`, `app/page.tsx`).
+A DAO site or marketplace can add object sign-in, gasless Whitechain vaults with co-present approvals, and acoustic attendance with one backend route and one component. See [docs/SDK.md](docs/SDK.md) and the runnable [sdk/examples/dao-site](sdk/examples/dao-site).
 
 New identities use a real browser-side DINOv2 object-matching experiment adapted from VILA. The photo check is bypassable and provides no secure authentication or wallet recovery. Existing passphrase identities retain their original login path. Acoustic checks use real ggwave WASM, browser audio and opt-in microphone access, with sessions and matches persisted in the encrypted Arkiv aggregate. A match is a cooperative demo, not proof of physical proximity or identity; challenges can be replayed or relayed. Existing demo vaults and their requests remain simulated. New Safe vaults have real testnet contracts and signer-enforced thresholds; their transactions are handled in the Safe app, not by the demo approval flow. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
 
@@ -52,11 +74,11 @@ Receipt: /invoice/[id] · webhook invoice.paid (HMAC) · GET /api/v1/treasury/ex
 
 **Key files:**
 - `contracts/`: the Foundry project, with `TichoriPresenceGuard`, `TichoriSafeSetup` and tests against the canonical Safe 1.4.1 bytecode read from Whitechain.
-- `packages/core/src/whitechain/`: chain constants, EIP-712 helpers and the pure treasury domain. `packages/server/src/whitechain/`: the relayer (journaled, never resends), config and keys.
-- `packages/server/src/services/treasury.ts`: the service behind the `/api/v1` routes.
-- `packages/react/src/components/VaultTreasury.tsx`: the UI (`<VaultTreasury vaultId/>` from `@tijori/react`).
-- `packages/invoices`: the vendor SDK.
-- `examples/vendor-studio`: a separate vendor app, where the integration is about 20 lines.
+- `sdk/packages/core/src/whitechain/`: chain constants, EIP-712 helpers and the pure treasury domain. `sdk/packages/server/src/whitechain/`: the relayer (journaled, never resends), config and keys.
+- `sdk/packages/server/src/services/treasury.ts`: the service behind the `/api/v1` routes.
+- `sdk/packages/react/src/components/VaultTreasury.tsx`: the UI (`<VaultTreasury vaultId/>` from `@tijori/react`).
+- `sdk/packages/invoices`: the vendor SDK.
+- `sdk/examples/vendor-studio`: a separate vendor app, where the integration is about 20 lines.
 
 ### Deployed on Whitechain Sepolia
 
@@ -115,8 +137,9 @@ While it's set, the vault shows a **REHEARSAL TOKEN** flag and `capabilities()` 
 ### Tests
 
 - `forge test --root contracts`: 12 guard tests on the canonical Safe bytecode.
-- `npm test`: unit tests plus the existing API flow.
-- `npm run test:whitechain`: the production server against a local anvil chain (id 1874) with canonical Safe bytecode and mock USDT. It covers:
+- `npm run sdk:test`: SDK unit tests plus the Arkiv API flow, run against the local package source.
+- `npm test`: the app's tests, run against the published packages (`npm run build` first).
+- `npm run sdk:test:whitechain`: the local SDK server against a local anvil chain (id 1874) with canonical Safe bytecode and mock USDT. It covers:
   - gasless vault creation and the vendor invoice
   - wrong object, presence or key, each rejected at zero cost
   - the guard blocking un-attested execution
@@ -129,7 +152,7 @@ No testnet funds are spent by tests.
 ### Current limitations (honest)
 
 - **Simulated checks:** object matching and the ultrasonic presence check are **simulated providers** in this repo.
-  - The real implementations plug into `ObjectMatchingProvider` and `PresenceSessionProvider` (`packages/core/src/integrations.ts`; pass replacements as `createTijoriServer({ providers })`).
+  - The real implementations plug into `ObjectMatchingProvider` and `PresenceSessionProvider` (`sdk/packages/core/src/integrations.ts`; pass replacements as `createTijoriServer({ providers })`).
   - The UI calls `<TijoriProvider onPresenceEmit>` and emits `tijori:presence-emit` (plus the deprecated `tichori:presence-emit`). Approvers use `<TijoriProvider presence>` or `window.tijoriPresence.listen()` (`window.tichoriPresence` still works).
   - Frequency matching alone does not prove proximity: relay and replay must be handled by the real provider.
 - **Simulated room code is visible to members:** in simulated presence mode, members' session listings include the room code so the flow can be demonstrated without audio. In live mode only the initiator's device receives it.
@@ -166,7 +189,7 @@ Existing demo vaults retain their old behavior and have no fund-holding address.
 
 ## Storage design and limits
 
-`packages/core/src/vault.ts` preserves the demo rules and validates relationships. `packages/server/src/storage/arkiv.ts` stores a named `tichori_state_v1` entity with an indexed namespace, revision, encoding and unindexed ciphertext bytes. Reads require the configured creator and owner. One encrypted aggregate makes each logical change atomic and avoids partially updated membership or approvals. It deliberately targets a small demo: serialized plaintext is capped at 100,000 bytes and exact writes must also fit the gas limits. This is not a scalable relational database replacement.
+`sdk/packages/core/src/vault.ts` preserves the demo rules and validates relationships. `sdk/packages/server/src/storage/arkiv.ts` stores a named `tichori_state_v1` entity with an indexed namespace, revision, encoding and unindexed ciphertext bytes. Reads require the configured creator and owner. One encrypted aggregate makes each logical change atomic and avoids partially updated membership or approvals. It deliberately targets a small demo: serialized plaintext is capped at 100,000 bytes and exact writes must also fit the gas limits. This is not a scalable relational database replacement.
 
 AES-256-GCM uses an independent server key, a fresh 12-byte IV, and authenticated context binding chain genesis, signer, namespace and format version. Public metadata still reveals the server wallet, namespace, revision, ciphertext length, timing and expiration. Encryption does not add real user authentication. Keep the signing wallet exclusive to this app and do not transfer the state entity.
 
@@ -180,7 +203,7 @@ The Arkiv MCP supplied network/schema/SDK guidance. Application reads and local 
 
 ## Checks
 
-Run `npm run build` before `npm test`, then `npm run lint`. The test suite uses a local RPC fixture and a throwaway signer, encryption key and journal directory. It exercises the real SDK encoding, signed transactions, API flow, receipt recovery and error guards without spending testnet funds. Fixture results do not establish live Rabdi persistence; `arkiv:check` and an authorized migration/write with readback establish that separately. `npm run arkiv:verify` performs a paid storage update of the same vault contents with a fresh encrypted envelope and verifies the receipt and exact readback.
+Run `npm run sdk:test` for the SDK, `npm run build` before `npm test` for the app, then `npm run lint`. The test suite uses a local RPC fixture and a throwaway signer, encryption key and journal directory. It exercises the real SDK encoding, signed transactions, API flow, receipt recovery and error guards without spending testnet funds. Fixture results do not establish live Rabdi persistence; `arkiv:check` and an authorized migration/write with readback establish that separately. `npm run arkiv:verify` performs a paid storage update of the same vault contents with a fresh encrypted envelope and verifies the receipt and exact readback.
 
 ## Acoustic checks on Arkiv
 
@@ -199,7 +222,7 @@ After configuring Arkiv as above, run `npm run dev:phone` and open https://local
 
 ### Verification
 
-Run `npm run build` before `npm test`, then `npm run lint`. Tests use throwaway local RPC fixtures and isolated journal directories, not live funds. They cover actual ggwave WASM waveform encoding/decoding, microphone cleanup, schema upgrades, read-only SQLite import, encrypted storage, membership/isolation, expiry/replay rejection, concurrent starts/matches, idempotency, restart persistence and uncertain-write reconciliation. Real speaker-to-microphone behavior still depends on device volume, permissions, hardware and room acoustics and requires a two-device check.
+Run `npm run sdk:test` for the SDK, `npm run build` before `npm test` for the app, then `npm run lint`. Tests use throwaway local RPC fixtures and isolated journal directories, not live funds. They cover actual ggwave WASM waveform encoding/decoding, microphone cleanup, schema upgrades, read-only SQLite import, encrypted storage, membership/isolation, expiry/replay rejection, concurrent starts/matches, idempotency, restart persistence and uncertain-write reconciliation. Real speaker-to-microphone behavior still depends on device volume, permissions, hardware and room acoustics and requires a two-device check.
 
 ## Object-only DINOv2 experiment
 
