@@ -9,8 +9,7 @@
   },
   "homepage": "https://github.com/Adithya2310/Tijori#readme",
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "engines": {
     "node": ">=22.12"
