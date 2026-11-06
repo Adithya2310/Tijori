@@ -5,6 +5,8 @@ import { withArkiv, StorageError } from '../db.ts';
 import { publicState, VaultError } from '../vault.ts';
 import { normalizeOwners, prepareSafe, SAFE_CHAIN_ID, verifySafeDeployment, readSafeStatus } from '../safe.ts';
 import { providers } from '../integrations/providers.ts';
+import { readWhitechainSafe } from '../whitechain/safe.ts';
+import { formatUsdt } from '../whitechain/chain.ts';
 import { IntegrationUnavailableError } from '../integrations/contracts.ts';
 import { actionIdentity, applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from './domain.ts';
 
@@ -26,6 +28,12 @@ export async function readState(identityId?: string, versioned = false) {
 export async function balance(id: string | null) {
  const safe = await withArkiv(async store => (await store.read()).vault.groups.find(g => g.id === id)?.safe);
  if (!safe) throw new VaultError('This vault has no deployed Safe.');
+ if (safe.chainId === 1874) {
+  try {
+   const status = await readWhitechainSafe(safe.address);
+   return { address: status.address, chainId: status.chainId, owners: status.owners, threshold: status.threshold, nonce: status.nonce.toString(), guard: status.guard, balanceWei: status.balanceWei.toString(), balanceEth: formatEther(status.balanceWei), balanceUsdt: formatUsdt(status.balanceUsdt) };
+  } catch { throw new StorageError('Could not read the Safe on Whitechain Sepolia.'); }
+ }
  try { const status = await readSafeStatus(safe.address); return { ...status, balanceEth: formatEther(BigInt(status.balanceWei)) }; }
  catch { throw new StorageError('Could not read the Safe on Base Sepolia.'); }
 }

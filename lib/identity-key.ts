@@ -17,15 +17,27 @@ export async function generateIdentity(passphrase: string) {
  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode('tichori-identity-v1:' + address) }, key, bytes(privateKey.slice(2)));
  return { address, keyEnvelope: { version: 1 as const, salt: hex(salt), iv: hex(iv), ciphertext: hex(new Uint8Array(ciphertext)) } };
 }
-export async function unlockIdentity(address: string, envelope: KeyEnvelope, passphrase: string) {
+async function decryptIdentity(address: string, envelope: KeyEnvelope, passphrase: string) {
  try {
   const key = await derive(passphrase, bytes(envelope.salt));
   const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(envelope.iv), additionalData: new TextEncoder().encode('tichori-identity-v1:' + address.toLowerCase()) }, key, bytes(envelope.ciphertext));
   const raw = new Uint8Array(plaintext);
-  const valid = privateKeyToAccount(('0x' + hex(raw)) as `0x${string}`).address.toLowerCase() === address.toLowerCase();
+  const privateKey = ('0x' + hex(raw)) as `0x${string}`;
   raw.fill(0);
-  if (!valid) throw Error();
+  const account = privateKeyToAccount(privateKey);
+  if (account.address.toLowerCase() !== address.toLowerCase()) throw Error();
+  return account;
  } catch { throw new Error('Could not unlock the identity. Check your address and passphrase.'); }
+}
+export async function unlockIdentity(address: string, envelope: KeyEnvelope, passphrase: string) {
+ await decryptIdentity(address, envelope, passphrase);
+}
+/**
+ * Unlock the identity as a signer for EIP-712 approvals (Safe transactions).
+ * Keep the returned account in memory only. Never persist it, log it or send it to the server.
+ */
+export async function unlockIdentityAccount(address: string, envelope: KeyEnvelope, passphrase: string) {
+ return decryptIdentity(address, envelope, passphrase);
 }
 export function validKeyEnvelope(value: unknown): value is KeyEnvelope {
  if (!value || typeof value !== 'object') return false;

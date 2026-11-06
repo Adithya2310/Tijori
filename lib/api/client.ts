@@ -6,7 +6,7 @@ import type { PendingSafe } from '../safe-client.ts';
 export type ApplicationState = ReturnType<typeof applicationState>;
 export type ApiTransaction = ApplicationState['transactions'][number];
 export type MutationResponse = ApplicationState & { identityId?: string; keyEnvelope?: KeyEnvelope };
-export type SafeStatus = { balanceEth: string; owners: string[]; threshold: number };
+export type SafeStatus = { balanceEth: string; owners: string[]; threshold: number; chainId?: number; balanceUsdt?: string; guard?: string | null; nonce?: string };
 export type PreparedVault = Omit<PendingSafe, 'version' | 'phase' | 'deploymentTxHash'> & { chainId: number; threshold: number; transaction: { to: string; data: string; value: string } };
 export type MutationAction = 'signup' | 'login' | 'groups' | 'transactions' | 'approve' | 'register-safe';
 const paths: Record<MutationAction, string> = { signup: 'identities', login: 'identities/login', groups: 'groups', transactions: 'transactions', approve: 'physical-approvals', 'register-safe': 'vaults/register-safe' };

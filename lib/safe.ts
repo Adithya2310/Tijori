@@ -8,7 +8,8 @@ export const SAFE_VERSION = '1.4.1' as const;
 export const SAFE_RPC = 'https://sepolia.base.org';
 const factoryAbi = parseAbi(['function createProxyWithNonce(address _singleton, bytes initializer, uint256 saltNonce) returns (address proxy)', 'event ProxyCreation(address indexed proxy, address singleton)']);
 const setupAbi = parseAbi(['function setup(address[] _owners, uint256 _threshold, address to, bytes data, address fallbackHandler, address paymentToken, uint256 payment, address paymentReceiver)']);
-export type SafeRecord = { address: `0x${string}`; chainId: 84532; owners: `0x${string}`[]; threshold: number; deploymentTxHash: Hex; saltNonce: string };
+// chainId 84532 = legacy Base Sepolia vaults (MetaMask-deployed). 1874 = guarded Whitechain Sepolia vaults (see lib/whitechain).
+export type SafeRecord = { address: `0x${string}`; chainId: 84532 | 1874; owners: `0x${string}`[]; threshold: number; deploymentTxHash: Hex; saltNonce: string; guard?: `0x${string}` };
 
 export function normalizeOwners(input: unknown): `0x${string}`[] {
  if (!Array.isArray(input) || input.length < 2 || input.length > 32) throw new Error('A vault requires between 2 and 32 signer addresses.');
