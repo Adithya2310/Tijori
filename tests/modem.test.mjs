@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initModem, playChallengeTone, stopChallengeTone, startAcousticListener, stopAcousticListener } from '../lib/acousticModem.js';
+import { initModem, playChallengeTone, stopChallengeTone, startAcousticListener, stopAcousticListener } from '@tijori/client/acoustic-modem';
 
 let lastBuffer, processor, constraints, stopped = 0, permissionRequest;
 class AudioContext {

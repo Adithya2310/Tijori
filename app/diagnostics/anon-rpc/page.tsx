@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { requestViaNym } from '@/lib/anon-rpc';
-import { WHITECHAIN_TESTNET, verifyTestnetChain, type DiagnosticMode } from '@/lib/anon-rpc-protocol';
+import { requestViaNym } from '@tijori/client';
+import { WHITECHAIN_TESTNET, verifyTestnetChain, type DiagnosticMode } from '@tijori/client';
 import styles from './page.module.css';
 
 export default function AnonRpcDiagnostic() {

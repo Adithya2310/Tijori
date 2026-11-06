@@ -6,6 +6,7 @@ import { currentProviders, emit, setting, waitUntil } from '../context.ts';
 import '../providers.ts';
 import { IntegrationUnavailableError } from '@tijori/core/integrations';
 import { applicationState } from '@tijori/core/api/domain';
+import type { ApprovalSession, InboxKeyResponse, InvoiceReceipt, RelayerStatus, StartSessionResponse } from '@tijori/core/api/types';
 import { WHITECHAIN_CHAIN_ID, explorerTx, formatUsdt } from '@tijori/core/whitechain/chain';
 import { isRehearsalToken, isTreasuryConfigured, treasuryConfig, usdtAddress, whitechainClient } from '../whitechain/config.ts';
 import { readWhitechainSafe } from '../whitechain/safe.ts';
@@ -89,7 +90,7 @@ export async function proposePayout(body: Record<string, unknown>, opHeader: str
 
 // ---------- Approval sessions ----------
 const safeTxOf = (s: Session): SafeTx => ({ to: s.safeTx.to, value: BigInt(s.safeTx.value), data: s.safeTx.data, operation: 0, safeTxGas: BigInt(s.safeTx.safeTxGas), baseGas: BigInt(s.safeTx.baseGas), gasPrice: BigInt(s.safeTx.gasPrice), gasToken: s.safeTx.gasToken, refundReceiver: s.safeTx.refundReceiver, nonce: BigInt(s.safeTx.nonce) });
-function sessionView(session: Session, vault: Vault, identityId?: string) {
+function sessionView(session: Session, vault: Vault, identityId?: string): ApprovalSession {
  const proposal = vault.proposals.find(p => p.id === session.proposalId);
  const invoice = vault.invoices.find(i => i.id === proposal?.invoice_id);
  const name = (id: string) => vault.wallets.find(w => w.id === id)?.name ?? 'Signer';
@@ -105,7 +106,7 @@ function sessionView(session: Session, vault: Vault, identityId?: string) {
  };
 }
 
-export async function startApprovalSession(body: Record<string, unknown>) {
+export async function startApprovalSession(body: Record<string, unknown>): Promise<StartSessionResponse> {
  const proposalId = str(body.proposalId, 100), initiatorId = str(body.initiatorId, 100);
  return withTreasury(async ctx => {
   await reconcileSessions(ctx);
@@ -141,7 +142,7 @@ export async function startApprovalSession(body: Record<string, unknown>) {
  });
 }
 
-export async function listApprovalSessions(identityId: string) {
+export async function listApprovalSessions(identityId: string): Promise<{ sessions: ApprovalSession[] }> {
  if (!isTreasuryConfigured()) return { sessions: [] };
  return withTreasury(async ctx => {
   await reconcileSessions(ctx);
@@ -269,7 +270,7 @@ async function reconcileSessions(ctx: Ctx) {
 }
 
 // ---------- Vendor invoice inbox (Operate) ----------
-export async function issueInboxKey(body: Record<string, unknown>) {
+export async function issueInboxKey(body: Record<string, unknown>): Promise<InboxKeyResponse> {
  const vaultId = str(body.vaultId, 100), identityId = str(body.identityId, 100), issuedAt = str(body.issuedAt, 40), signature = str(body.signature, 300) as Hex, master = masterKey();
  const age = Date.now() - Date.parse(issuedAt);
  if (!(age >= -60_000 && age <= 300_000)) throw new VaultError('Sign a fresh inbox key request (at most 5 minutes old).');
@@ -316,7 +317,7 @@ export async function vendorRemind(authorization: string | null, body: Record<st
  });
 }
 /** Public receipt: invoice IDs are unguessable capability URLs. */
-export async function invoiceReceipt(id: string) {
+export async function invoiceReceipt(id: string): Promise<InvoiceReceipt | null> {
  return withState(async store => {
   const vault = (await store.read()).vault;
   const invoice = vault.invoices.find(i => i.id === id);
@@ -351,7 +352,7 @@ export async function treasuryExport(vaultId: string | null, identityId: string 
   return { csv: treasuryCsv(vault, vaultId!), filename: `tichori-${whitechainVault(vault, vaultId!).name.replace(/[^\w-]+/g, '-').toLowerCase()}-payouts.csv` };
  });
 }
-export async function relayerStatus() {
+export async function relayerStatus(): Promise<RelayerStatus> {
  if (!isTreasuryConfigured()) return { configured: false as const };
  const config = treasuryConfig(), client = whitechainClient();
  const journal = await withTreasury(async ctx => structuredClone(ctx.journal) as TreasuryJournal);

@@ -208,7 +208,7 @@ Only the preparation script on the laptop/build host contacts Hugging Face for t
 
 The inference worker can be served by a Vercel-hosted frontend; it requires no Python or inference server. **The full app is not ready to deploy publicly on Vercel.** Its unauthenticated paid-write API and Arkiv signer lock/journal require a separate authenticated backend with a persistent filesystem and exclusive signer ownership. This branch does not change that architecture or deploy the app.
 
-Downloaded model/runtime artifacts live in Git-ignored `public/dino-assets/`. Keep these public files with the built app when hosting it. Preparation needs curl/network access on first run; subsequent builds reuse verified files. See `scripts/licenses/` and the license copies served beside the model/runtime. Do not place credentials or recovery files in `public/`.
+Downloaded model/runtime artifacts live in Git-ignored `public/tijori-assets/`. Keep these public files with the built app when hosting it. Preparation needs curl/network access on first run; subsequent builds reuse verified files. See `scripts/licenses/` and the license copies served beside the model/runtime. Do not place credentials or recovery files in `public/`.
 
 ## Isolated object profiles on Arkiv (v5)
 

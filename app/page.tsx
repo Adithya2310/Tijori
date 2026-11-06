@@ -3,20 +3,22 @@ import { useEffect, useRef, useState } from 'react';
 import ProximityCheck from './components/ProximityCheck';
 import PhoneAccess from './components/PhoneAccess';
 import ObjectIdentityForm from './components/ObjectIdentityForm';
-import { listServerIdentities } from '@/lib/device-identities';
+import { listServerIdentities } from '@tijori/client';
 import type { ObjectProfile } from '@tijori/core/object-profile';
-import { listDeviceIdentities } from '@/lib/device-identities';
-import { unlockObjectIdentityAccount, type ObjectRecovery } from '@/lib/dino-wallet';
+import { listDeviceIdentities } from '@tijori/client';
+import { unlockObjectIdentityAccount, type ObjectRecovery } from '@tijori/client';
 import { getAddress, isAddress } from 'viem';
-import { waitForSafe, readPendingSafe, PENDING_SAFE_KEY, type PendingSafe } from '@/lib/safe-client';
-import { tichori, type ApplicationState, type ApiTransaction, type MutationAction } from '@/lib/api/client';
+import { waitForSafe, readPendingSafe, PENDING_SAFE_KEY, type PendingSafe } from '@tijori/client';
+import { createTijoriClient, type ApplicationState, type ApiTransaction, type MutationAction } from '@tijori/client';
 import { unlockIdentityAccount, type KeyEnvelope } from '@tijori/core/identity-key';
-import { setSessionSigner } from '@/lib/session-signer';
+import { setSessionSigner } from '@tijori/client';
 import { SAFE_NETWORKS } from '@tijori/core/whitechain/chain';
 import { TreasuryPanel } from './treasury-panel';
 import { ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Check, CheckCircle2, Copy, Fingerprint, LockKeyhole, LogOut, Plus, Radio, ShieldCheck, Users, Wallet, X } from 'lucide-react';
 import Link from 'next/link';
-import { readAnonymousBalance } from '@/lib/anon-rpc';
+import { readAnonymousBalance } from '@tijori/client';
+
+const tijori = createTijoriClient();
 
 type Identity={id:string;name:string;address:string|null};
 type Data=ApplicationState;
@@ -34,7 +36,7 @@ export default function Home(){
  const [passphrase,setPassphrase]=useState('');
  const [pendingSafe,setPendingSafe]=useState<PendingSafe|null>(null),[recoveryHash,setRecoveryHash]=useState(''),[safeStatus,setSafeStatus]=useState<{vaultId:string;balanceEth:string;owners:string[];threshold:number}|null>(null),[balanceError,setBalanceError]=useState('');
  const [name,setName]=useState(''),[address,setAddress]=useState(''),[objectName,setObjectName]=useState(''),[memberInput,setMemberInput]=useState(''),[members,setMembers]=useState<string[]>([]),[groupId,setGroupId]=useState(''),[recipient,setRecipient]=useState(''),[amount,setAmount]=useState(''),[asset,setAsset]=useState('ETH'),[note,setNote]=useState(''),[selected,setSelected]=useState<Tx|null>(null),[matched,setMatched]=useState(false);
- useEffect(()=>{tichori.state(sessionStorage.getItem('pv-session')||undefined).then(async result=>{setData(result);setActive(sessionStorage.getItem('pv-session')||'');try{setPendingSafe(readPendingSafe())}catch(e){setError(e instanceof Error?e.message:'Pending deployment record is invalid.')}try{const remembered=[...await listDeviceIdentities(),...await listServerIdentities()];if(remembered.some(item=>item.status==='registered')&&!remembered.some(item=>item.status==='pending'))setAuthMode('login')}catch{}setLoaded(true)}).catch(()=>{setError('Could not load storage. Check the server configuration and reload.');setLoaded(true)})},[]);
+ useEffect(()=>{tijori.state(sessionStorage.getItem('pv-session')||undefined).then(async result=>{setData(result);setActive(sessionStorage.getItem('pv-session')||'');try{setPendingSafe(readPendingSafe())}catch(e){setError(e instanceof Error?e.message:'Pending deployment record is invalid.')}try{const remembered=[...await listDeviceIdentities(),...await listServerIdentities()];if(remembered.some(item=>item.status==='registered')&&!remembered.some(item=>item.status==='pending'))setAuthMode('login')}catch{}setLoaded(true)}).catch(()=>{setError('Could not load storage. Check the server configuration and reload.');setLoaded(true)})},[]);
  const wallet=data.wallets.find(w=>w.id===active), groups=data.groups, currentGroup=groups.find(g=>g.id===groupId);
  const [matching,setMatching]=useState<Tx[]>([]);
  const stateRequest=useRef(0);
@@ -52,20 +54,20 @@ export default function Home(){
  },[localDemo,active,busy,vaultId]);
  async function refreshState(){
   const request=++stateRequest.current;setBusy(true);setError('');
-  try{const result=await tichori.state(active||undefined);if(request!==stateRequest.current)return false;setData(result);return true}
+  try{const result=await tijori.state(active||undefined);if(request!==stateRequest.current)return false;setData(result);return true}
   catch(e){if(request===stateRequest.current)setError(e instanceof Error?e.message:'Could not refresh the vault.');return false}
   finally{if(request===stateRequest.current)setBusy(false)}
  }
  async function checkRequests(id=groupId){
   setMatched(false);setMatching([]);if(!id)return;
   const request=++stateRequest.current;setBusy(true);setError('');
-  try{const result=await tichori.discover(active,id);if(request!==stateRequest.current)return;setMatching(result.requests);setMatched(true)}
+  try{const result=await tijori.discover(active,id);if(request!==stateRequest.current)return;setMatching(result.requests);setMatched(true)}
   catch(e){if(request===stateRequest.current)setError(e instanceof Error?e.message:'Could not discover requests.')}
   finally{if(request===stateRequest.current)setBusy(false)}
  }
  function showVaults(){setVaultId('');setError('');setNotice('');if(!busy)void refreshState()}
  function showVault(id:string){setVaultId(id);setSafeStatus(null);setBalanceError('');setError('');setNotice('');if(!busy)void refreshState();const target=data.groups.find(item=>item.id===id);if(target?.safe&&target.safe.chainId!==1874)void loadBalance(id)}
- async function loadBalance(id:string){try{const value=await tichori.balance(id);setSafeStatus({vaultId:id,balanceEth:value.balanceEth,owners:value.owners,threshold:value.threshold});setBalanceError('')}catch{setSafeStatus(null);setBalanceError('Unable to load the Base Sepolia balance.')}}
+ async function loadBalance(id:string){try{const value=await tijori.balance(id);setSafeStatus({vaultId:id,balanceEth:value.balanceEth,owners:value.owners,threshold:value.threshold});setBalanceError('')}catch{setSafeStatus(null);setBalanceError('Unable to load the Base Sepolia balance.')}}
  async function checkAnonymousBalance(address:`0x${string}`){setAnonBusy(true);setAnonBalance({address,message:'Connecting to Nym; this can take a while…'});try{const balance=await readAnonymousBalance(address);setAnonBalance({address,message:`Anon RPC result: ${balance} ETH`})}catch{setAnonBalance({address,message:'Anon RPC check failed or timed out. No direct fallback was used.'})}finally{setAnonBusy(false)}}
  async function copyAddress(address:string){try{await navigator.clipboard.writeText(address);setNotice('Address copied.')}catch{setError('Could not copy the vault address.')}}
  const close=()=>{setModal(null);setError('');setMatched(false)};
@@ -80,7 +82,7 @@ export default function Home(){
    try{operation=JSON.parse(sessionStorage.getItem('pv-operation')||'null')}catch{}
    if(operation?.fingerprint!==fingerprint||typeof operation?.id!=='string')operation={fingerprint,id:crypto.randomUUID()};
    sessionStorage.setItem('pv-operation',JSON.stringify(operation));
-   const result=await tichori.mutate(path,body,operation.id);
+   const result=await tijori.mutate(path,body,operation.id);
    // The unlocked identity key signs Whitechain vault approvals; it stays in tab memory only.
    if(path==='login'){
     if(recovery) setSessionSigner(await unlockObjectIdentityAccount(recovery,result.keyEnvelope as KeyEnvelope));
@@ -113,7 +115,7 @@ export default function Home(){
   await waitForSafe(pending);
   const hash=pending.deploymentTxHash!;
   const body={name:pending.name,creatorId:pending.creatorId,owners:pending.owners,saltNonce:pending.saltNonce,address:pending.address,deploymentTxHash:hash};
-  const result=await tichori.mutate('register-safe',body,'safe-'+hash.slice(2));
+  const result=await tijori.mutate('register-safe',body,'safe-'+hash.slice(2));
   const created=(result.groups as Group[]).find(item=>item.safe?.deploymentTxHash.toLowerCase()===hash.toLowerCase());
   if(!created)throw Error('Safe deployment was recorded but could not be found. Resume this operation.');
   localStorage.removeItem(PENDING_SAFE_KEY);setPendingSafe(null);setData(result);setVaultId(created.id);setSafeStatus(null);setBalanceError('');close();setNotice('Safe vault deployed and saved to Arkiv.');void loadBalance(created.id);
@@ -125,7 +127,7 @@ export default function Home(){
    // Gasless: Tichori's relayer deploys a Safe on Whitechain with the presence guard installed. No wallet needed.
    let op=sessionStorage.getItem('pv-vault-op');const fingerprint=JSON.stringify([name.trim(),members]);
    if(!op||!op.startsWith(fingerprint+'|')){op=fingerprint+'|'+crypto.randomUUID();sessionStorage.setItem('pv-vault-op',op)}
-   const result=await tichori.createWhitechainVault(name.trim(),active,members,op.split('|').pop()!);
+   const result=await tijori.createWhitechainVault(name.trim(),active,members,op.split('|').pop()!);
    sessionStorage.removeItem('pv-vault-op');setData(result);if(result.vaultId)setVaultId(result.vaultId);close();setNotice('Whitechain vault created. The presence guard is active.');
   }catch(e){setError(e instanceof Error?e.message:'Could not create the vault.')}finally{setBusy(false)}
  }

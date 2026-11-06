@@ -23,7 +23,7 @@ async function start() {
 async function stop() { if (server && server.exitCode === null) { const exited = new Promise(resolve => server.once('exit', resolve)); server.kill('SIGTERM'); await exited; } }
 try {
  await start();
- const modelPath = 'dino-assets/models/Xenova/dinov2-small/c2bb04a51fab207c420665f1946016107bffc701/onnx/model.onnx';
+ const modelPath = 'tijori-assets/models/Xenova/dinov2-small/c2bb04a51fab207c420665f1946016107bffc701/onnx/model.onnx';
  const assetBase = `http://127.0.0.1:${port}/`;
  const modelHead = await fetch(assetBase + modelPath, { method: 'HEAD' });
  assert.equal(modelHead.status, 200);
@@ -32,7 +32,7 @@ try {
  const range = await fetch(assetBase + modelPath, { headers: { Range: 'bytes=0-15' } });
  assert.equal(range.status, 206);
  assert.equal((await range.arrayBuffer()).byteLength, 16);
- const runtime = await fetch(assetBase + 'dino-assets/runtime/1.31.0-dev.20260914-8d85527a0/ort-wasm-simd-threaded.wasm', { method: 'HEAD' });
+ const runtime = await fetch(assetBase + 'tijori-assets/runtime/1.31.0-dev.20260914-8d85527a0/ort-wasm-simd-threaded.wasm', { method: 'HEAD' });
  assert.equal(runtime.status, 200);
  assert.match(runtime.headers.get('content-type'), /application\/wasm/);
  assert.equal((await request('state')).data.storageMode, 'local');

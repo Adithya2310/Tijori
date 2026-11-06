@@ -8,12 +8,14 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
-    "src/**/*.js",
     "src/**/*.d.ts"
   ],
   "references": [
     {
       "path": "../core"
     }
+  ],
+  "exclude": [
+    "src/vendor/**/*.js"
   ]
 }

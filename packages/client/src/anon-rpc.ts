@@ -8,6 +8,8 @@ import { validateReadRequest, type ReadRequest, type DiagnosticMode } from './an
 // pending bootstrap, its fetches, nested sandbox, and any late-created worker.
 export function requestViaNym(request: ReadRequest, options: {
  signal?: AbortSignal; mode?: DiagnosticMode; timeoutMs?: number;
+ /** Same-origin page that calls startAnonRpcHost(). Default '/diagnostics/anon-rpc/host'. */
+ hostUrl?: string;
 } = {}): Promise<string> {
  validateReadRequest(request);
  const timeoutMs = options.timeoutMs ?? 90_000;
@@ -43,11 +45,11 @@ export function requestViaNym(request: ReadRequest, options: {
   window.addEventListener('message', ready);
   options.signal?.addEventListener('abort', cancel, { once: true });
   if (options.signal?.aborted) { cancel(); return; }
-  frame.src = '/diagnostics/anon-rpc/host';
+  frame.src = options.hostUrl ?? '/diagnostics/anon-rpc/host';
   document.body.appendChild(frame);
  });
 }
 
-export async function readAnonymousBalance(address: Address): Promise<string> {
- return formatEther(BigInt(await requestViaNym({ endpoint: 'https://sepolia.base.org', method: 'eth_getBalance', params: [address, 'latest'] })));
+export async function readAnonymousBalance(address: Address, options: { hostUrl?: string; signal?: AbortSignal } = {}): Promise<string> {
+ return formatEther(BigInt(await requestViaNym({ endpoint: 'https://sepolia.base.org', method: 'eth_getBalance', params: [address, 'latest'] }, options)));
 }

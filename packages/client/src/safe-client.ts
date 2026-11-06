@@ -1,13 +1,18 @@
 'use client';
 import { createPublicClient, custom, getAddress, type Hex } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { tichori } from './api/client.ts';
+import { LEGACY_PENDING_SAFE_KEY, LEGACY_SAFE_DEPLOY_LOCK } from '@tijori/core/legacy';
+import type { PendingSafe } from '@tijori/core/api/types';
+import { createTijoriClient, type TijoriClient } from './api.ts';
+
+// Legacy Base Sepolia vaults: the user's own wallet deploys a plain Safe (no presence guard). New vaults use Whitechain.
 const SAFE_CHAIN_ID = 84532;
 
 type Provider = { request(args: { method: string; params?: readonly unknown[] | object }): Promise<unknown> };
-declare global { interface Window { ethereum?: Provider } }
-export type PendingSafe = { version: 1; name: string; creatorId: string; owners: `0x${string}`[]; saltNonce: string; address: `0x${string}`; phase: 'awaiting-wallet' | 'submitted'; deploymentTxHash?: Hex };
-export const PENDING_SAFE_KEY = 'tichori-pending-safe-v1';
+// Read the injected wallet without a global Window augmentation (which would clash with integrators' own typings).
+const injectedWallet = (): Provider | undefined => typeof window === "undefined" ? undefined : (window as unknown as { ethereum?: Provider }).ethereum;
+export type { PendingSafe };
+export const PENDING_SAFE_KEY = LEGACY_PENDING_SAFE_KEY;
 export function readPendingSafe(): PendingSafe | null {
  const raw=localStorage.getItem(PENDING_SAFE_KEY); if(raw===null)return null;
  try { const value = JSON.parse(raw); if (!value || value.version !== 1 || typeof value.name !== 'string' || typeof value.creatorId !== 'string' || !Array.isArray(value.owners) || typeof value.address !== 'string' || !['awaiting-wallet', 'submitted'].includes(value.phase)) throw Error(); return value; } catch { throw new Error('Pending deployment record is invalid. Preserve it and reconcile before creating another vault.'); }
@@ -41,18 +46,18 @@ export async function ensureBaseSepolia(provider: Provider): Promise<void> {
   throw new Error('Your wallet is still on another network. Select Base Sepolia (chain ID 84532), then try again.');
  }
 }
-export async function deploySafe(name: string, creatorId: string, additionalOwners: string[]): Promise<PendingSafe> {
+export async function deploySafe(name: string, creatorId: string, additionalOwners: string[], client: Pick<TijoriClient, 'prepareVault'> = createTijoriClient()): Promise<PendingSafe> {
  if (!navigator.locks) throw new Error('This browser does not support safe deployment coordination.');
- return navigator.locks.request('tichori-safe-deployment', { ifAvailable: true }, async lock => {
+ return navigator.locks.request(LEGACY_SAFE_DEPLOY_LOCK, { ifAvailable: true }, async lock => {
  if (!lock) throw new Error('Another vault deployment is already in progress.');
  if (readPendingSafe()) throw new Error('A deployment is already pending. Resume or reconcile it before creating another vault.');
- const provider = window.ethereum;
+ const provider = injectedWallet();
  if (!provider) throw new Error('Connect an EVM wallet browser extension to create a Base Sepolia vault.');
  const accounts = await provider.request({ method: 'eth_requestAccounts' });
  if (!Array.isArray(accounts) || typeof accounts[0] !== 'string') throw new Error('Choose a wallet account to create the vault.');
  const creator = getAddress(accounts[0]);
  await ensureBaseSepolia(provider);
- const plan = await tichori.prepareVault(name, creatorId, [creator, ...additionalOwners]);
+ const plan = await client.prepareVault(name, creatorId, [creator, ...additionalOwners]);
  if (plan.chainId !== SAFE_CHAIN_ID || getAddress(plan.owners[0]) !== creator) throw new Error('The deployment plan does not match this wallet.');
  const { owners, saltNonce } = plan;
  const address = getAddress(plan.address);
@@ -77,7 +82,7 @@ export async function deploySafe(name: string, creatorId: string, additionalOwne
  });
 }
 export async function waitForSafe(pending: PendingSafe): Promise<void> {
- const provider = window.ethereum;
+ const provider = injectedWallet();
  if (!provider) throw new Error('Connect your wallet to check the deployment.');
  if (!pending.deploymentTxHash) throw new Error('The deployment hash is missing. Find it in your wallet and enter it to resume.');
  await ensureBaseSepolia(provider);

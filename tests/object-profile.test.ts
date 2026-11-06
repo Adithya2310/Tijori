@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { featuresFromTokens, compareDinoFeatures } from '@tijori/core/dino';
 import { packObjectProfile, unpackObjectProfile } from '@tijori/core/object-profile';
-import { createObjectIdentity, unlockObjectIdentity } from '../lib/dino-wallet.ts';
+import { createObjectIdentity, unlockObjectIdentity } from '@tijori/client/dino-wallet';
 import { applyAction, emptyVault, validateVault, publicState } from '@tijori/core/vault';
 import { encryptState } from '@tijori/server/storage/codec';
 test('compact references roundtrip with stable key wrapping and remain private in public state',async()=>{

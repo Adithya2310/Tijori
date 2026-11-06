@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { validModelFile } from '../scripts/prepare-dino-assets.mjs';
+import { validModelFile } from '@tijori/client/cli/prepare-assets';
 
 test('model asset validation rejects incomplete, changed and missing downloads', async () => {
  const directory = await mkdtemp(join(tmpdir(), 'tichori-model-test-'));

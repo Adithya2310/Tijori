@@ -2,24 +2,22 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { AudioLines, Radio, X } from 'lucide-react';
 
+import { createTijoriClient, loadAcousticModem, type AcousticModem, type ProximitySessionView } from '@tijori/client';
+import { LEGACY_PROXIMITY_SESSION_PREFIX } from '@tijori/core/legacy';
+
 type Group = {id:string;name:string;members:{id:string;name:string}[]};
-type Session = {id:string;hostId:string;expiresAt:number;status:string;matches:{walletId:string;verifiedAt:number;attestationHash:string}[]};
-type Modem = typeof import('@/lib/acousticModem');
-async function api(groupId:string,walletId:string,body?:object,operationId?:string) {
- const response=await fetch(body?'/api/proximity':`/api/proximity?${new URLSearchParams({groupId,walletId})}`, body?{method:'POST',headers:{'Content-Type':'application/json',...(operationId?{'Idempotency-Key':operationId}:{})},body:JSON.stringify({groupId,walletId,...body})}:{cache:'no-store'});
- const result=await response.json();
- if(!response.ok) throw Error(result.error || 'Could not connect to the group check.');
- return result as {session:Session|null;nonce?:string};
-}
-export default function ProximityCheck({group,walletId,storageMode}:{group:Group;walletId:string;storageMode?:'local'|'arkiv'}) {
+type Session = ProximitySessionView;
+type Modem = AcousticModem;
+const proximity = createTijoriClient().proximity;
+export default function ProximityCheck({group,walletId,storageMode}:{group:Group;walletId:string;storageMode?:string}) {
  const headingId=useId();
  const audioHintId=useId();
  const [ultrasound,setUltrasound]=useState(false);
- const operationKey=`tichori-proximity:${group.id}:${walletId}`;
+ const operationKey=`${LEGACY_PROXIMITY_SESSION_PREFIX}${group.id}:${walletId}`;
  const [session,setSession]=useState<Session|null>(null),[opened,setOpened]=useState(false),[mode,setMode]=useState<'idle'|'starting'|'permission'|'broadcasting'|'listening'>('idle'),[error,setError]=useState(''),[connectionError,setConnectionError]=useState(''),[level,setLevel]=useState(0),[now,setNow]=useState(()=>Date.now()),[audioReady,setAudioReady]=useState(false);
  const audioSession=useRef<string|null>(null),revision=useRef(0);
  const modem=useRef<Modem|null>(null),generation=useRef(0),running=useRef(false),hostSession=useRef<string|null>(null),dialog=useRef<HTMLDialogElement>(null),trigger=useRef<HTMLButtonElement|null>(null);
- useEffect(()=>{let live=true;import('@/lib/acousticModem').then(value=>{if(live){modem.current=value;setAudioReady(true);}}).catch(()=>{if(live)setError('Could not load the acoustic modem. Reload to try again.');});return ()=>{live=false;};},[]);
+ useEffect(()=>{let live=true;loadAcousticModem().then(value=>{if(live){modem.current=value;setAudioReady(true);}}).catch(()=>{if(live)setError('Could not load the acoustic modem. Reload to try again.');});return ()=>{live=false;};},[]);
  function stopAudio() {
   generation.current++;running.current=false;
   modem.current?.stopChallengeTone();modem.current?.stopAcousticListener();setMode('idle');setLevel(0);
@@ -28,12 +26,12 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
   const generationRef=generation;
   let disposed=false;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();
   async function refresh() {
-   try {const version=revision.current;const r=await fetch(`/api/proximity?${new URLSearchParams({groupId:group.id,walletId})}`,{cache:'no-store',signal:controller.signal});const result=await r.json();if(!r.ok)throw Error(result.error);if(!disposed && version===revision.current){setSession(result.session);setNow(Date.now());setConnectionError('');}}
+   try {const version=revision.current;const result=await proximity.status(group.id,walletId,controller.signal);if(!disposed && version===revision.current){setSession(result.session);setNow(Date.now());setConnectionError('');}}
    catch(e){if(!disposed){setConnectionError(e instanceof Error?e.message:'Connection lost.');if(running.current){generationRef.current++;running.current=false;modem.current?.stopChallengeTone();modem.current?.stopAcousticListener();setMode('idle');}}}
    finally{if(!disposed)timer=setTimeout(refresh,1500);}
   }
   void refresh();const clock=setInterval(()=>setNow(Date.now()),1000);
-  return ()=>{disposed=true;controller.abort();clearTimeout(timer);clearInterval(clock);if(running.current){generationRef.current++;running.current=false;modem.current?.stopChallengeTone();modem.current?.stopAcousticListener();}const id=hostSession.current;if(id)void fetch('/api/proximity',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cancel',groupId:group.id,walletId,sessionId:id})}).catch(()=>{});};
+  return ()=>{disposed=true;controller.abort();clearTimeout(timer);clearInterval(clock);if(running.current){generationRef.current++;running.current=false;modem.current?.stopChallengeTone();modem.current?.stopAcousticListener();}const id=hostSession.current;if(id)void proximity.cancel(group.id,walletId,id,{keepalive:true}).catch(()=>{});};
  },[group.id,walletId]);
  const active=session?.status==='active' && session.expiresAt>now;
  const ownMatch=session?.matches.find(m=>m.walletId===walletId);
@@ -48,7 +46,7 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
  async function close() {
   revision.current++;stopAudio();setOpened(false);
   const id=hostSession.current;hostSession.current=null;
-  if(id)try{const result=await api(group.id,walletId,{action:'cancel',sessionId:id});setSession(result.session);sessionStorage.removeItem(operationKey);}catch(e){setError(e instanceof Error?e.message:'Could not end check. It expires automatically.');}
+  if(id)try{const result=await proximity.cancel(group.id,walletId,id);setSession(result.session);sessionStorage.removeItem(operationKey);}catch(e){setError(e instanceof Error?e.message:'Could not end check. It expires automatically.');}
  }
  async function begin(kind:'host'|'listener',button:HTMLButtonElement) {
   if(running.current)return;
@@ -64,8 +62,8 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
    if(kind==='host') {
     let operationId=sessionStorage.getItem(operationKey);
     if(!operationId || (session && !active)){operationId=crypto.randomUUID();sessionStorage.setItem(operationKey,operationId);}
-    const result=await api(group.id,walletId,{action:'start'},operationId);created=result.session?.id;
-    if(!current()){if(created)await api(group.id,walletId,{action:'cancel',sessionId:created});return;}
+    const result=await proximity.start(group.id,walletId,operationId);created=result.session?.id;
+    if(!current()){if(created)await proximity.cancel(group.id,walletId,created);return;}
     audioSession.current=created||null;setSession(result.session);setNow(Date.now());hostSession.current=created||null;
     if(!result.session || !result.nonce){sessionStorage.removeItem(operationKey);throw Error('This check ended. Close and start a fresh check.');}
     const expires=result.session.expiresAt;
@@ -85,7 +83,7 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
     const started=await modem.current.startAcousticListener(async nonce=>{
      if(!current()||verifying)return;verifying=true;
      try{
-      const result=await api(group.id,walletId,{action:'verify',sessionId:listeningSession.id,nonce});
+      const result=await proximity.verify(group.id,walletId,listeningSession.id,nonce);
       if(current()){setSession(result.session);setError('');stopAudio();}
      }catch(e){if(current())setError(e instanceof Error?e.message:'Signal did not match.');}
      finally{verifying=false;}
@@ -94,7 +92,7 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
    }
   }catch(e){
    if(current()){stopAudio();setError(e instanceof Error?e.message:'Audio could not start. Check browser permissions.');}
-   if(created){hostSession.current=null;await api(group.id,walletId,{action:'cancel',sessionId:created}).catch(()=>{});}
+   if(created){hostSession.current=null;await proximity.cancel(group.id,walletId,created).catch(()=>{});}
   }
  }
  const seconds=session?Math.max(0,Math.ceil((session.expiresAt-now)/1000)):0;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deploySafe, ensureBaseSepolia, PENDING_SAFE_KEY, readPendingSafe } from '../lib/safe-client.ts';
+import { deploySafe, ensureBaseSepolia, PENDING_SAFE_KEY, readPendingSafe } from '@tijori/client/safe-client';
 
 test('a pending or corrupt deployment blocks another wallet submission', async () => {
  const values = new Map<string, string>();

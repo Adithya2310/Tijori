@@ -10,6 +10,7 @@ import { isRehearsalToken } from '../whitechain/config.ts';
 import { formatUsdt } from '@tijori/core/whitechain/chain';
 import { IntegrationUnavailableError } from '@tijori/core/integrations';
 import { treasuryCapabilities } from './treasury.ts';
+import type { ObjectIdentitiesResponse, PreparedVault, SafeStatus } from '@tijori/core/api/types';
 import { actionIdentity, applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from '@tijori/core/api/domain';
 
 export function capabilities() {
@@ -23,8 +24,8 @@ export function capabilities() {
  };
 }
 function storageMetadata(vault: Vault) {return {storageMode:storageMode(),peers:vault.wallets.filter(w=>w.address&&w.keyEnvelope&&w.object_name).map(({id,name,address})=>({id,name,address}))};}
-export async function readObjectIdentities() {
- return withState(async store=>{const {vault}=await store.read();return {identities:vault.wallets.filter(w=>w.objectProfile&&w.keyEnvelope).map(w=>({name:w.name,address:w.address,keyEnvelope:w.keyEnvelope,objectProfile:w.objectProfile})),storageMode:storageMode()};});
+export async function readObjectIdentities(): Promise<ObjectIdentitiesResponse> {
+ return withState(async store=>{const {vault}=await store.read();return {identities:vault.wallets.flatMap(w=>w.objectProfile&&w.keyEnvelope?[{name:w.name,address:w.address,keyEnvelope:w.keyEnvelope,objectProfile:w.objectProfile}]:[]),storageMode:storageMode()};});
 }
 export async function readState(identityId?: string, versioned = false) {
  return withState(async store => {
@@ -32,7 +33,7 @@ export async function readState(identityId?: string, versioned = false) {
   return {...(versioned ? applicationState(vault, identityId) : publicState(vault)),...storageMetadata(vault)};
  });
 }
-export async function balance(id: string | null) {
+export async function balance(id: string | null): Promise<SafeStatus> {
  const safe = await withState(async store => (await store.read()).vault.groups.find(g => g.id === id)?.safe);
  if (!safe) throw new VaultError('This vault has no deployed Safe.');
  if (safe.chainId === 1874) {
@@ -44,7 +45,7 @@ export async function balance(id: string | null) {
  try { const status = await readSafeStatus(safe.address); return { ...status, balanceEth: formatEther(BigInt(status.balanceWei)) }; }
  catch { throw new StorageError('Could not read the Safe on Base Sepolia.'); }
 }
-export async function prepareDeployment(body: Record<string, unknown>) {
+export async function prepareDeployment(body: Record<string, unknown>): Promise<PreparedVault> {
  if(storageMode()==='local')throw new VaultError('Safe deployment is disabled in local acoustic testing mode.');
  const name = typeof body.name === 'string' ? body.name.trim() : '';
  if (!name || name.length > 120) throw new VaultError('Enter a vault name of at most 120 characters.');
@@ -56,7 +57,7 @@ export async function prepareDeployment(body: Record<string, unknown>) {
  const kit = await prepareSafe(owners, saltNonce);
  const address = await kit.getAddress();
  const tx = await kit.createSafeDeploymentTransaction();
- return { name, creatorId: body.creatorId, owners, saltNonce, address, chainId: SAFE_CHAIN_ID, threshold: Math.floor(owners.length / 2) + 1, transaction: { to: tx.to, data: tx.data, value: `0x${BigInt(tx.value).toString(16)}` } };
+ return { name, creatorId: String(body.creatorId), owners, saltNonce, address: address as `0x${string}`, chainId: SAFE_CHAIN_ID, threshold: Math.floor(owners.length / 2) + 1, transaction: { to: tx.to, data: tx.data, value: `0x${BigInt(tx.value).toString(16)}` } };
 }
 export async function queryWorkflow(action: 'discover' | 'verify-object', body: Record<string, unknown>) {
  return withState(async store => {

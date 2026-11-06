@@ -1,15 +1,17 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowUpRight, AudioLines, Check, CheckCircle2, Copy, Download, FileText, Fuel, Radio, ScanLine, ShieldCheck, Users, Wallet, X } from 'lucide-react';
-import { tichori, type ApplicationState, type ApprovalSession, type RelayerStatus, type SafeStatus } from '@/lib/api/client';
+import { createTijoriClient, type ApplicationState, type ApprovalSession, type RelayerStatus, type SafeStatus } from '@tijori/client';
 import { unlockIdentityAccount, type KeyEnvelope } from '@tijori/core/identity-key';
-import { sessionSigner, setSessionSigner } from '@/lib/session-signer';
+import { sessionSigner, setSessionSigner } from '@tijori/client';
 import { explorerAddress, explorerTx, formatUsdt } from '@tijori/core/whitechain/chain';
 import { inboxKeyMessage, safeTxTypedData } from '@tijori/core/whitechain/safe-tx';
 import ObjectCapture from './components/ObjectCapture';
-import { DINO_OBJECT_NAME, unlockObjectIdentityAccount, verifyObjectRecovery, type ObjectRecovery } from '@/lib/dino-wallet';
-import { listDeviceIdentities, listServerIdentities } from '@/lib/device-identities';
+import { DINO_OBJECT_NAME, unlockObjectIdentityAccount, verifyObjectRecovery, type ObjectRecovery } from '@tijori/client';
+import { listDeviceIdentities, listServerIdentities } from '@tijori/client';
 import type { DinoFeatures } from '@tijori/core/dino';
+
+const tijori = createTijoriClient();
 
 type Group = ApplicationState['groups'][number];
 type Identity = { id: string; name: string; address: string | null };
@@ -29,11 +31,11 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
  const [to, setTo] = useState(''), [amount, setAmount] = useState(''), [note, setNote] = useState(''), [objectName, setObjectName] = useState(''), [passphrase, setPassphrase] = useState('');
  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [recovery, setRecovery] = useState<ObjectRecovery | null | undefined>(undefined), [features, setFeatures] = useState<DinoFeatures | null>(null), [inbox, setInbox] = useState<{ inboxKey: string; webhookSecret: string; endpoint: string } | null>(null), [now, setNow] = useState(0);
  const refresh = useCallback(async () => {
-  try { setStatus(await tichori.balance(vault.id)); } catch { /* shown as unavailable */ }
-  try { setGas(await tichori.relayer()); } catch { /* optional */ }
+  try { setStatus(await tijori.balance(vault.id)); } catch { /* shown as unavailable */ }
+  try { setGas(await tijori.relayer()); } catch { /* optional */ }
  }, [vault.id]);
  const poll = useCallback(async () => {
-  try { const r = await tichori.sessions(me.id); setSessions(r.sessions.filter(s => s.vaultId === vault.id)); } catch { /* transient */ }
+  try { const r = await tijori.sessions(me.id); setSessions(r.sessions.filter(s => s.vaultId === vault.id)); } catch { /* transient */ }
  }, [me.id, vault.id]);
  useEffect(() => { const first = setTimeout(() => { setNow(Date.now()); void refresh(); void poll(); }, 0); const id = setInterval(() => { setNow(Date.now()); void poll(); }, 3000); return () => { clearTimeout(first); clearInterval(id); }; }, [refresh, poll]);
  useEffect(() => {
@@ -52,13 +54,13 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
 
  async function propose(invoiceId?: string) {
   await run(async () => {
-   const result = await tichori.propose(invoiceId ? { vaultId: vault.id, proposerId: me.id, invoiceId } : { vaultId: vault.id, proposerId: me.id, to: to.trim(), amount: amount.trim(), note: note.trim() }, crypto.randomUUID());
+   const result = await tijori.propose(invoiceId ? { vaultId: vault.id, proposerId: me.id, invoiceId } : { vaultId: vault.id, proposerId: me.id, to: to.trim(), amount: amount.trim(), note: note.trim() }, crypto.randomUUID());
    onState(result); setModal(null); setTo(''); setAmount(''); setNote(''); notify('Payment proposed. Gather a majority of signers in one room and start an approval session.');
   });
  }
  async function start(proposalId: string) {
   await run(async () => {
-   const { session, emit } = await tichori.startSession(proposalId, me.id);
+   const { session, emit } = await tijori.startSession(proposalId, me.id);
    setEmitting(emit); setSessions(list => [session, ...list.filter(s => s.id !== session.id)]);
    // Hand the code to the ultrasonic emitter (teammate integration); the demo shows it on screen.
    window.dispatchEvent(new CustomEvent('tichori:presence-emit', { detail: emit }));
@@ -85,7 +87,7 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
   let signer = sessionSigner(me.address);
   if (!signer) {
    if (passphrase.length < 12) throw new Error('Enter your key passphrase to unlock your signer.');
-   const login = await tichori.mutate('login', { address: me.address, objectName: objectName.trim() }, crypto.randomUUID());
+   const login = await tijori.mutate('login', { address: me.address, objectName: objectName.trim() }, crypto.randomUUID());
    signer = await unlockIdentityAccount(me.address, login.keyEnvelope as KeyEnvelope, passphrase);
    setSessionSigner(signer); setPassphrase('');
   }
@@ -97,7 +99,7 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
    const t = session.safeTx;
    const signature = await signer.signTypedData(safeTxTypedData(session.chainId, session.safe, { ...t, value: BigInt(t.value), safeTxGas: BigInt(t.safeTxGas), baseGas: BigInt(t.baseGas), gasPrice: BigInt(t.gasPrice), nonce: BigInt(t.nonce) }));
    const code = await heardCode(session);
-   const result = await tichori.approveInSession({ sessionId: session.id, walletId: me.id, objectName: objectMarker, signature, evidence: { reference: code, challengeId: session.presence.challengeId } });
+   const result = await tijori.approveInSession({ sessionId: session.id, walletId: me.id, objectName: objectMarker, signature, evidence: { reference: code, challengeId: session.presence.challengeId } });
    onState(result); setSessions(list => list.map(s => (s.id === result.session.id ? result.session : s))); setActive(result.session); setObjectName('');
    if (result.session.status === 'executed') { setModal(null); setEmitting(null); notify(`Paid ${result.session.proposal?.amount} USDT on Whitechain. The vault covered the network fee.`); void refresh(); }
    else if (result.session.status === 'failed') setError(result.session.error || 'The payout failed on-chain.');
@@ -107,7 +109,7 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
   await run(async () => {
    const { signer } = await verifyMe(), issuedAt = new Date().toISOString();
    const signature = await signer.signMessage({ message: inboxKeyMessage(vault.id, me.id, issuedAt) });
-   setInbox(await tichori.inboxKey({ vaultId: vault.id, identityId: me.id, issuedAt, signature })); setObjectName('');
+   setInbox(await tijori.inboxKey({ vaultId: vault.id, identityId: me.id, issuedAt, signature })); setObjectName('');
   });
  }
  const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); notify('Copied.'); } catch { fail('Could not copy.'); } };
@@ -126,7 +128,7 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
   <div className="balance-note">{status?.guard ? <><ShieldCheck size={14} /> Presence guard active: payouts need a majority approving together in one session. Gas is paid by Tichori and refunded by the vault in USDT.</> : 'Checking the presence guard…'}</div>
   {live && <ApprovalCard session={live} me={me} emitting={emitting} now={now} onOpen={() => { setActive(live); setError(''); setModal('approve'); }} />}
   <div className="vault-address"><div><span>VAULT ADDRESS</span><strong>{vault.safe!.address}</strong><small><a href={explorerAddress(vault.safe!.address)} target="_blank" rel="noreferrer">View on Whitechain explorer</a></small></div><button className="light-btn" onClick={() => void copy(vault.safe!.address)}><Copy size={15} /> Copy address</button></div>
-  <section className="activity"><div className="section-heading"><div><div className="section-kicker">PAYOUTS</div><h2>Proposals <span>{proposals.length}</span></h2></div><a className="light-btn" href={tichori.exportUrl(vault.id, me.id)}><Download size={15} /> Export CSV</a></div>
+  <section className="activity"><div className="section-heading"><div><div className="section-kicker">PAYOUTS</div><h2>Proposals <span>{proposals.length}</span></h2></div><a className="light-btn" href={tijori.exportUrl(vault.id, me.id)}><Download size={15} /> Export CSV</a></div>
    {proposals.length === 0 ? <div className="empty-activity"><div className="empty-icon"><AudioLines size={22} /></div><div><strong>No payouts yet.</strong><p>Propose a payment, then approve it together.</p></div></div> :
     <div className="tx-list">{proposals.map(p => <div className="tx-row" key={p.id}><div className="tx-icon"><ArrowUpRight size={19} /></div><div className="tx-info"><strong>{formatUsdt(p.amount)} USDT to {invoices.find(i => i.id === p.invoice_id)?.vendor_name ?? short(p.to)}</strong><small>{p.proposer_name} · {p.note || 'No note'}{p.approvers.length ? ` · approved together by ${p.approvers.map(a => a.name).join(', ')}` : ''}</small></div>
      <div className="tx-amount">{p.status === 'pending' ? <button className="light-btn" disabled={busy || !!live} onClick={() => void start(p.id)}><Radio size={15} /> Start approval session</button> : <><small className={p.status === 'executed' ? 'success' : 'pending'}>{p.status === 'executed' ? 'Paid' : 'Failed'}</small>{p.tx_hash && <a href={explorerTx(p.tx_hash)} target="_blank" rel="noreferrer">Receipt</a>}</>}</div></div>)}</div>}

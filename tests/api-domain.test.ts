@@ -4,7 +4,7 @@ import { applyAction, emptyVault } from '@tijori/core/vault';
 import { applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from '@tijori/core/api/domain';
 import { providers } from '@tijori/server/providers';
 import type { IntegrationProviders } from '@tijori/core/integrations';
-import { createTichoriClient } from '../lib/api/client.ts';
+import { createTichoriClient } from '@tijori/client/api';
 
 const address = (n: number) => '0x' + n.toString(16).padStart(40, '0');
 const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };

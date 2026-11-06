@@ -3,8 +3,8 @@ import { useEffect, useState } from 'react';
 import ObjectCapture from './ObjectCapture';
 import { packObjectProfile, unpackObjectProfile, type ObjectProfile } from '@tijori/core/object-profile';
 import { type DinoFeatures } from '@tijori/core/dino';
-import { createObjectIdentity, downloadObjectRecovery, parseObjectRecovery, verifyObjectRecovery, DINO_OBJECT_NAME, type ObjectRecovery } from '@/lib/dino-wallet';
-import { listDeviceIdentities, listServerIdentities, saveDeviceIdentity, type DeviceIdentity } from '@/lib/device-identities';
+import { createObjectIdentity, downloadObjectRecovery, parseObjectRecovery, verifyObjectRecovery, DINO_OBJECT_NAME, type ObjectRecovery } from '@tijori/client';
+import { listDeviceIdentities, listServerIdentities, saveDeviceIdentity, type DeviceIdentity } from '@tijori/client';
 
 export default function ObjectIdentityForm({ mode, busy, onSubmit, onWorking }: {
  mode: 'signup' | 'login'; busy: boolean; onWorking: (value: boolean) => void;

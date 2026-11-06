@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory } from 'fake-indexeddb';
-import { listDeviceIdentities, saveDeviceIdentity, validateDeviceIdentity } from '../lib/device-identities.ts';
+import { listDeviceIdentities, saveDeviceIdentity, validateDeviceIdentity } from '@tijori/client/device-identities';
 import { featuresFromTokens } from '@tijori/core/dino';
-import { createObjectIdentity, verifyObjectRecovery } from '../lib/dino-wallet.ts';
+import { createObjectIdentity, verifyObjectRecovery } from '@tijori/client/dino-wallet';
 
 test('remembered identity survives reopening storage, reuses a pending key, and rejects the wrong object', async () => {
  Object.defineProperty(globalThis, 'indexedDB', { value: new IDBFactory(), configurable: true });

@@ -8,6 +8,7 @@ export * from './types.ts';
 export * from './state-store.ts';
 export * from './integrations.ts';
 export * from './api/domain.ts';
+export type * from './api/types.ts';
 export * from './whitechain/chain.ts';
 export * from './whitechain/safe-tx.ts';
 export * from './whitechain/domain.ts';

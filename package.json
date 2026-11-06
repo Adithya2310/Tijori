@@ -7,7 +7,7 @@
     "examples/*"
   ],
   "scripts": {
-    "dino:prepare": "node --conditions=@tijori/source --experimental-strip-types scripts/prepare-dino-assets.mjs",
+    "dino:prepare": "node --conditions=@tijori/source --experimental-strip-types packages/client/src/cli/prepare-assets.ts public/tijori-assets",
     "prebuild": "npm run dino:prepare",
     "predev": "npm run dino:prepare",
     "dev": "next dev",
@@ -36,7 +36,6 @@
     "@huggingface/transformers": "^4.3.2",
     "@safe-global/protocol-kit": "^8.0.11",
     "@safe-global/safe-deployments": "^1.37.67",
-    "ggwave": "^0.4.0",
     "lucide-react": "^1.69.0",
     "next": "^16.4.5",
     "qrcode.react": "^4.2.0",
@@ -53,6 +52,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.5",
     "fake-indexeddb": "^6.2.7",
+    "ggwave": "^0.4.0",
     "typescript": "^6.0.3"
   }
 }

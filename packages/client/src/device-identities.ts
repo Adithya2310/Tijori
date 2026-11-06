@@ -1,4 +1,7 @@
+import { LEGACY_IDENTITY_DB, LEGACY_OBJECT_RECOVERY_KIND } from '@tijori/core/legacy';
+import { unpackObjectProfile } from '@tijori/core/object-profile';
 import { parseObjectRecovery, type ObjectRecovery } from './dino-wallet.ts';
+import { createTijoriClient, type TijoriClient } from './api.ts';
 
 export type DeviceIdentity = { version: 1; name: string; status: 'pending' | 'registered'; recovery: ObjectRecovery };
 export function validateDeviceIdentity(value: unknown): DeviceIdentity {
@@ -12,11 +15,11 @@ export function validateDeviceIdentity(value: unknown): DeviceIdentity {
 function database(): Promise<IDBDatabase> {
  return new Promise((resolve, reject) => {
   if (typeof indexedDB === 'undefined') { reject(Error('Browser storage is unavailable. Enable site storage to remember this identity.')); return; }
-  const request = indexedDB.open('tichori-object-identities', 1);
+  const request = indexedDB.open(LEGACY_IDENTITY_DB, 1);
   request.onupgradeneeded = () => request.result.createObjectStore('identities', { keyPath: 'recovery.address' });
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(Error('Could not open saved identities. Check browser storage permissions.'));
-  request.onblocked = () => reject(Error('Close other Tichori tabs before updating saved identities.'));
+  request.onblocked = () => reject(Error('Close other tabs of this app before updating saved identities.'));
  });
 }
 export async function listDeviceIdentities(): Promise<DeviceIdentity[]> {
@@ -39,10 +42,8 @@ export async function saveDeviceIdentity(identity: DeviceIdentity): Promise<void
  });
 }
 
-export async function listServerIdentities(): Promise<DeviceIdentity[]> {
- const response=await fetch('/api/object-identities',{cache:'no-store'});
- const result=await response.json();
- if(!response.ok)throw Error(result.error||'Could not retrieve stored identities.');
- const {unpackObjectProfile}=await import('@tijori/core/object-profile');
- return result.identities.map((record: {name:string;address:string;keyEnvelope:ObjectRecovery['keyEnvelope'];objectProfile:import('@tijori/core/object-profile').ObjectProfile})=>validateDeviceIdentity({version:1,name:record.name,status:'registered',recovery:{version:1,kind:'tichori-insecure-object-demo',address:record.address,keyEnvelope:record.keyEnvelope,objectProfile:record.objectProfile,features:unpackObjectProfile(record.objectProfile)}}));
+/** Identities enrolled on the server (compact object profiles and encrypted key envelopes), for sign-in on a new device. */
+export async function listServerIdentities(client: Pick<TijoriClient, 'objectIdentities'> = createTijoriClient()): Promise<DeviceIdentity[]> {
+ const { identities } = await client.objectIdentities();
+ return identities.map(record => validateDeviceIdentity({ version: 1, name: record.name, status: 'registered', recovery: { version: 1, kind: LEGACY_OBJECT_RECOVERY_KIND, address: record.address, keyEnvelope: record.keyEnvelope, objectProfile: record.objectProfile, features: unpackObjectProfile(record.objectProfile) } }));
 }

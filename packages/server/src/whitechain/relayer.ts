@@ -1,3 +1,4 @@
+import type { ApprovalSessionStatus, WireSafeTx } from '@tijori/core/api/types';
 import { mkdir, open, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -12,10 +13,10 @@ import { factoryAbi, guardAbi, guardedInitializer, majority, predictSafeAddress,
 export type SessionApproval = { walletId: string; address: Address; signature: Hex; at: string; objectMode: string; presenceMode: string };
 export type Session = {
  id: string; proposalId: string; vaultId: string; safe: Address; threshold: number; owners: Address[]; initiatorId: string;
- safeTx: { to: Address; value: string; data: Hex; operation: 0; safeTxGas: string; baseGas: string; gasPrice: string; gasToken: Address; refundReceiver: Address; nonce: string };
+ safeTx: WireSafeTx;
  safeTxHash: Hex; challenge: { challengeId: string; code: string; expiresAt: string }; presence: { provider: string; mode: string };
  createdAt: string; expiresAt: string; approvals: SessionApproval[];
- status: 'open' | 'executing' | 'submitted' | 'executed' | 'failed' | 'expired' | 'superseded';
+ status: ApprovalSessionStatus;
  txHash?: Hex; gasRefund?: string; recorded?: boolean; error?: string;
 };
 type PendingTx = { hash: Hex; nonce: number; purpose: 'deploy' | 'execute'; ref: string; sentAt: string };

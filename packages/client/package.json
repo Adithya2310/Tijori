@@ -37,7 +37,8 @@
     "src",
     "licenses",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "sideEffects": false,
   "dependencies": {
@@ -47,5 +48,8 @@
   },
   "peerDependencies": {
     "viem": "^2.57.16"
+  },
+  "scripts": {
+    "vendor:ggwave": "node scripts/vendor-ggwave.mjs"
   }
 }

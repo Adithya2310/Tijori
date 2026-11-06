@@ -1,74 +1,37 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { validDinoFeatures, type DinoFeatures } from '@tijori/core/dino';
+import type { DinoFeatures } from '@tijori/core/dino';
+import { extractObjectFeatures } from '@tijori/client';
 import CameraCapture from './CameraCapture';
 
 export default function ObjectCapture({ disabled, onFeatures, autoProcess = false, isolate=false }: { disabled: boolean; autoProcess?: boolean; isolate?:boolean; onFeatures: (features: DinoFeatures | null) => void }) {
- const worker = useRef<Worker | null>(null);
- const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
- const startupTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
- const generation = useRef(0);
+ const controller = useRef<AbortController | null>(null);
  const [consent, setConsent] = useState(false), [image, setImage] = useState<Blob | null>(null);
  const [running, setRunning] = useState(false), [status, setStatus] = useState(''), [error, setError] = useState(''), [engineNote, setEngineNote] = useState('');
  const [preview, setPreview] = useState('');
  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
- useEffect(() => { const version = generation; return () => { version.current++; worker.current?.terminate(); clearTimeout(timeout.current); clearTimeout(startupTimeout.current); }; }, []);
- function stopWorker() { worker.current?.terminate(); worker.current = null; clearTimeout(startupTimeout.current); }
+ useEffect(() => () => controller.current?.abort(), []);
  function reset() {
-  generation.current++; stopWorker(); clearTimeout(timeout.current);
+  controller.current?.abort(); controller.current = null;
   setRunning(false); setStatus(''); setError(''); setEngineNote(''); onFeatures(null);
  }
  function process(selectedImage: Blob | null = image, point?: {x:number;y:number}) {
   if (!selectedImage || !consent || running || disabled) return;
-  const image = selectedImage;
-  reset(); const attempt = ++generation.current;
-  const current = () => generation.current === attempt;
-  const armDeadline = () => {
-   clearTimeout(timeout.current);
-   timeout.current = setTimeout(() => fail('No model download or processing progress for five minutes. Keep this page open near the laptop and try again.'), 300_000);
-  };
-  const progress = (message: string) => { if (current()) { setStatus(message); armDeadline(); } };
+  reset();
+  const attempt = new AbortController(); controller.current = attempt;
+  const current = () => controller.current === attempt;
   setRunning(true); setStatus('Starting local DINOv2…');
-  let fallbackStarted = false;
-  const finish = (features: DinoFeatures) => {
+  extractObjectFeatures(selectedImage, {
+   point, signal: attempt.signal,
+   onProgress: message => { if (current()) setStatus(message); },
+   onFallback: () => { if (current()) setEngineNote('Using on-device page processing because the worker could not run. The page may pause during inference. Your photo is still never uploaded.'); },
+  }).then(features => {
    if (!current()) return;
-   generation.current++; stopWorker(); clearTimeout(timeout.current);
-   setRunning(false); setStatus('Object features ready.'); onFeatures(features);
-  };
-  const fail = (message: string) => {
+   controller.current = null; setRunning(false); setStatus('Object features ready.'); onFeatures(features);
+  }, (failure: unknown) => {
    if (!current()) return;
-   generation.current++; stopWorker(); clearTimeout(timeout.current);
-   setRunning(false); setStatus(''); setError(message); onFeatures(null);
-  };
-  const fallback = async (reason: string) => {
-   if (!current() || fallbackStarted) return;
-   fallbackStarted = true; stopWorker();
-   setEngineNote('Using on-device page processing because the worker could not run. The page may pause during inference. Your photo is still never uploaded.');
-   progress('Loading the local model in this page…');
-   try {
-    const { extractObjectFeatures } = await import('@/lib/dino-inference');
-    if (!current()) return;
-    finish(await extractObjectFeatures(image, progress, () => !current(),point));
-   } catch (error) {
-    const detail = error instanceof Error ? error.message.slice(0, 400) : 'Unknown runtime error';
-    fail(`On-device processing failed: ${detail}. Worker startup: ${reason.slice(0, 180)}. Check your connection and retake the photo.`);
-   }
-  };
-  armDeadline();
-  try {
-   const instance = new Worker(new URL('../dino.worker.ts', import.meta.url), { type: 'module' }); worker.current = instance;
-   startupTimeout.current = setTimeout(() => void fallback('The worker did not start within 12 seconds'), 12_000);
-   instance.onerror = event => { event.preventDefault(); void fallback(event.message || 'The browser rejected worker startup'); };
-   instance.onmessageerror = () => void fallback('The worker response could not be read');
-   instance.onmessage = (event: MessageEvent) => {
-    if (!current() || fallbackStarted) return;
-    clearTimeout(startupTimeout.current);
-    if (event.data.status === 'progress') progress(event.data.message);
-    else if (event.data.status === 'complete' && validDinoFeatures(event.data.features)) finish(event.data.features);
-    else void fallback(event.data.message || 'Invalid worker output');
-   };
-   instance.postMessage({ image,point });
-  } catch (error) { void fallback(error instanceof Error ? error.message : 'This browser could not create a worker'); }
+   controller.current = null; setRunning(false); setStatus(''); setError(failure instanceof Error ? failure.message : 'On-device processing failed.'); onFeatures(null);
+  });
  }
  return <fieldset className="object-capture" disabled={disabled}>
   <legend>Personal object · DINOv2</legend>

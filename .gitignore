@@ -12,9 +12,10 @@ data/
 
 # Object demo recovery files contain sufficient material to recover identity keys.
 tichori-object-demo-*.json
+tijori-object-demo-*.json
 
 # Downloaded public model/runtime assets (prepared before builds).
-public/dino-assets/
+public/tijori-assets/
 # Local agent skills and notes (not shared)
 .agents/
 .claude/skills/whitechain-dev

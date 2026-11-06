@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { requestViaNym } from '../lib/anon-rpc.ts';
-import { parseRpcQuantity, validateReadRequest, verifyTestnetChain } from '../lib/anon-rpc-protocol.ts';
+import { requestViaNym } from '@tijori/client/anon-rpc';
+import { parseRpcQuantity, validateReadRequest, verifyTestnetChain } from '@tijori/client/anon-rpc-protocol';
 
 const request = { endpoint: 'https://rpc.testnet.whitechain.io', method: 'eth_chainId' as const, params: [] };
 

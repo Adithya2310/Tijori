@@ -6,7 +6,7 @@ This is an integration scaffold for the local prototype. Object matching and phy
 
 ```text
 Tichori UI / another local app
-    -> lib/api/client.ts (optional typed HTTP client)
+    -> @tijori/client createTijoriClient() (packages/client/src/api.ts, optional typed HTTP client)
     -> /api/v1/* (app/api/[...path]/route.ts)
     -> packages/server/src/handler.ts (routing, limits, origin check) via createTijoriServer()
     -> packages/server/src/services/service.ts (orchestration, durable writes, retry handling)
@@ -66,12 +66,12 @@ The legacy routes retain their full-state response shape. The versioned routes s
 
 ## Consuming from another application
 
-Use `lib/api/client.ts` directly inside this repository, or port its small HTTP client to the consuming app. This is a source-level client, not a published package. For a trusted local server, supply an absolute base URL; browser use currently requires the same origin.
+Use `createTijoriClient` from `@tijori/client` (source: `packages/client/src/api.ts`). Its request and response types come from `@tijori/core/api/types`, which the server handlers are also annotated with. For a trusted local server, supply an absolute base URL; browser writes currently require the same origin.
 
 ```ts
-import { createTichoriClient } from './lib/api/client';
+import { createTijoriClient } from '@tijori/client';
 
-const client = createTichoriClient('http://localhost:3000/api/v1');
+const client = createTijoriClient({ baseUrl: 'http://localhost:3000/api/v1' });
 const state = await client.state(identityId);
 const { requests, verification } = await client.discover(identityId, groupId);
 // Show verification.mode; the default result is explicitly simulated.

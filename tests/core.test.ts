@@ -25,8 +25,10 @@ test('frozen identifiers keep their exact persisted values', () => {
  assert.equal(core.attestationTypedData(1874, '0x0000000000000000000000000000000000000001', { safe: '0x0000000000000000000000000000000000000002', safeTxHash: `0x${'00'.repeat(32)}`, sessionId: `0x${'00'.repeat(32)}`, approvers: [], ref: `0x${'00'.repeat(32)}`, expiresAt: 0n }).domain.name, 'TichoriPresenceGuard');
 });
 
-test('@tijori/core stays isomorphic: no node:* imports in its sources', async () => {
- const root = new URL('../packages/core/src/', import.meta.url).pathname;
+test('@tijori/core and the browser code of @tijori/client have no node:* imports', async () => {
  const walk = async (dir: string): Promise<string[]> => (await Promise.all((await readdir(dir, { withFileTypes: true })).map(e => e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]))).flat();
- for (const file of await walk(root)) assert.doesNotMatch(await readFile(file, 'utf8'), /from ['"]node:|import\(['"]node:/, file);
+ const core = await walk(new URL('../packages/core/src/', import.meta.url).pathname);
+ // The client's CLI (prepare-assets) runs in Node; everything else ships to browsers.
+ const client = (await walk(new URL('../packages/client/src/', import.meta.url).pathname)).filter(file => !file.includes('/src/cli/'));
+ for (const file of [...core, ...client]) assert.doesNotMatch(await readFile(file, 'utf8'), /from ['"]node:|import\(['"]node:|require\(['"](fs|path)['"]\)/, file);
 });
