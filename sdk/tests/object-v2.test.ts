@@ -43,6 +43,7 @@ test('the matcher accepts the enrolled object from another view and rejects a di
  const other = matchObjectProfile(profile, packObjectQuery(pen.view()));
  assert.equal(other.matched, false); assert.ok(other.score < 0.3, `unrelated object scores low (${other.score})`);
  assert.equal(matchObjectProfile(profile, packObjectQuery(bottle.view(0.06)), { threshold: 0.9999 }).matched, false);
+ assert.ok(OBJECT_MATCH_THRESHOLD >= 0.5 && OBJECT_MATCH_THRESHOLD <= 0.8);
  assert.throws(() => matchObjectProfile(profile, { version: 2 } as never), /descriptor/);
 });
 
@@ -86,8 +87,10 @@ test('the server matches the login photo, releases key material only on a match,
  assert.match((await (await post('identities/login', { address: address(7), objectName: LEGACY_DINO_OBJECT_NAME })).json()).error, /older scanner/);
  assert.match((await (await post('identities/login', { address: address(1), objectName: OBJECT_IDENTITY_NAME })).json()).error, /username and a photo/);
 
- for (let i = 0; i < 5; i++) await post('identities/login', { username: 'sub', objectQuery: packObjectQuery(pen.view()) });
- assert.equal((await post('identities/login', { username: 'sub', objectQuery: packObjectQuery(bottle.view(0.06)) })).status, 400, 'throttled after repeated wrong objects');
+ for (let i = 0; i < 8; i++) await post('identities/login', { username: 'sub', objectQuery: packObjectQuery(pen.view()) });
+ const throttled = await post('identities/login', { username: 'sub', objectQuery: packObjectQuery(bottle.view(0.06)) });
+ assert.equal(throttled.status, 400, 'throttled after repeated wrong objects');
+ assert.match((await throttled.json()).error, /Too many wrong-object attempts/);
  resetObjectThrottle();
  assert.equal((await post('identities/login', { username: 'sub', objectQuery: packObjectQuery(bottle.view(0.06)) })).status, 200);
 });
@@ -105,6 +108,6 @@ test('real photos: different everyday objects never match each other at the ship
  for (let i = 0; i < samples.length; i++) for (let j = i + 1; j < samples.length; j++) {
   if (samples[i].label === samples[j].label) continue;
   const { score } = compareObjectViews(unpackObjectView(samples[i].view), unpackObjectView(samples[j].view));
-  assert.ok(score < OBJECT_MATCH_THRESHOLD - 0.3, `${samples[i].label} vs ${samples[j].label} scored ${score.toFixed(3)}`);
+  assert.ok(score < OBJECT_MATCH_THRESHOLD - 0.15, `${samples[i].label} vs ${samples[j].label} scored ${score.toFixed(3)}`);
  }
 });

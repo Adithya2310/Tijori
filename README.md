@@ -245,10 +245,10 @@ An identity is a **username linked to a personal object**. You log in with the u
    - Photos and masks never leave the browser. Only these descriptors (about 1 KB per view) are sent.
 2. **On the server (`@tijori/server`):**
    - At login, the server compares the photo's descriptor with the enrolled views: `score = w·cos(CLS) + (1 − w)·cos(object)`.
-   - The identity matches when the best view reaches the threshold (`OBJECT_MATCH_CLS_WEIGHT` 0.5 and `OBJECT_MATCH_THRESHOLD` 0.80 in `@tijori/core/object-match`).
-   - 0.80 is a conservative default. On real photos, different objects score 0.12–0.33 (a regression test in `sdk/tests/fixtures/real-objects.json`). Same-object angle tolerance has not been measured on real photos yet, so a very different angle may need a retake. Tune it with the object lab.
+   - The identity matches when the best view reaches the threshold (`OBJECT_MATCH_CLS_WEIGHT` 0.5 and `OBJECT_MATCH_THRESHOLD` 0.55 in `@tijori/core/object-match`).
+   - On real photos, different objects score 0.12–0.33 (a regression test in `sdk/tests/fixtures/real-objects.json`), so 0.55 keeps a wide gap while accepting natural angle and lighting changes. Same-object angle tolerance has only been measured on a few real photos, so a very different angle may need a retake. Tune it with the object lab. The server logs each score.
    - Only on a match does the server return the encrypted key envelope and the profile that derives its wrapping password.
-   - Wrong-object attempts are throttled (5 per 10 minutes per identity).
+   - Wrong-object attempts are throttled (8 per 2 minutes per identity, in server memory).
    - `/api/v1/object-identities` lists usernames only.
 
 **Limits (it is a demo, not authentication)**

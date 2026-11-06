@@ -4,10 +4,11 @@ import { IntegrationUnavailableError } from '@tijori/core/integrations';
 import { matchObjectProfile } from '@tijori/core/object-match';
 import { validObjectProfileV2, validObjectQuery } from '@tijori/core/object-profile';
 import { LEGACY_DINO_OBJECT_NAME } from '@tijori/core/legacy';
+import { VaultError } from '@tijori/core/vault';
 import { registerDefaults, type TijoriProviders } from './context.ts';
 
-// Throttle wrong-object attempts per identity (in memory, per server process): 5 failures per 10 minutes.
-const FAILURE_LIMIT = 5, FAILURE_WINDOW_MS = 10 * 60_000;
+// Throttle wrong-object attempts per identity (in memory, per server process): 8 failures per 2 minutes.
+const FAILURE_LIMIT = 8, FAILURE_WINDOW_MS = 2 * 60_000;
 const failures = new Map<string, number[]>();
 function recent(key: string) { const now = Date.now(); const list = (failures.get(key) ?? []).filter(at => now - at < FAILURE_WINDOW_MS); failures.set(key, list); return list; }
 const throttled = (key: string) => recent(key).length >= FAILURE_LIMIT;
@@ -30,9 +31,12 @@ export const providers: IntegrationProviders = {
    if (enrollment.objectName === LEGACY_DINO_OBJECT_NAME) return { accepted: false, mode: 'live', provider: this.id };
    if (!validObjectProfileV2(enrollment.objectProfile)) return { accepted: !!enrollment.objectName && enrollment.objectName === input.objectName.trim(), mode: 'simulated', provider: 'demo-description' };
    const key = enrollment.identityId ?? enrollment.address;
-   if (!validObjectQuery(input.objectQuery) || throttled(key)) return { accepted: false, mode: 'live', provider: this.id };
+   if (throttled(key)) throw new VaultError('Too many wrong-object attempts for this username. Wait two minutes, then try again with your registered object.');
+   if (!validObjectQuery(input.objectQuery)) return { accepted: false, mode: 'live', provider: this.id };
    const match = matchObjectProfile(enrollment.objectProfile, input.objectQuery);
    if (!match.matched) recordFailure(key); else failures.delete(key);
+   // Scores only (no descriptors or keys), to tune the threshold from real use.
+   console.info(`[tijori] object match ${match.matched ? 'accepted' : 'rejected'}: score ${match.score.toFixed(3)} (threshold ${match.threshold}, best view ${match.view})`);
    return { accepted: match.matched, mode: 'live', provider: this.id, score: Math.round(match.score * 1000) / 1000 };
   },
  },

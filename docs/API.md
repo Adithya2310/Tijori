@@ -120,7 +120,7 @@ DINOv2 and SlimSAM run on the device. The server only compares descriptors, usin
 
 Login errors:
 - a wrong object returns 400 "This is not the object registered for this username";
-- more than 5 wrong objects within 10 minutes for one identity are refused until the window passes;
+- after 8 wrong objects within 2 minutes for one identity, attempts are refused ("Too many wrong-object attempts") until the window passes (counted in server memory);
 - unknown usernames are refused;
 - scanner v1 identities get "Sign up again with a new scan".
 
