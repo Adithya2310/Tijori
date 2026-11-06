@@ -17,7 +17,7 @@ test('core randomness and hashing match node:crypto output formats', () => {
 
 test('frozen identifiers keep their exact persisted values', () => {
  assert.deepEqual({ ...legacy }, {
-  LEGACY_IDENTITY_AAD_PREFIX: 'tichori-identity-v1:', LEGACY_OBJECT_WRAP_DOMAIN: 'tichori-insecure-object-demo-v1:', LEGACY_OBJECT_RECOVERY_KIND: 'tichori-insecure-object-demo',
+  LEGACY_IDENTITY_AAD_PREFIX: 'tichori-identity-v1:', LEGACY_OBJECT_WRAP_DOMAIN: 'tichori-insecure-object-demo-v1:', LEGACY_OBJECT_RECOVERY_KIND: 'tichori-insecure-object-demo', LEGACY_DINO_OBJECT_NAME: 'dino-object-demo-v1',
   LEGACY_IDENTITY_DB: 'tichori-object-identities', LEGACY_PENDING_SAFE_KEY: 'tichori-pending-safe-v1', LEGACY_SAFE_DEPLOY_LOCK: 'tichori-safe-deployment', LEGACY_PROXIMITY_SESSION_PREFIX: 'tichori-proximity:',
   LEGACY_ARKIV_SCHEMA: 'tichori_state_v1', LEGACY_ARKIV_ENCODING: 'tichori/aes-256-gcm/v1', LEGACY_ARKIV_NAMESPACE: 'tichori-local-v1', LEGACY_LOCAL_STORE_CONTEXT: 'tichori-local-acoustic-demo-v1',
   LEGACY_API_KEYS_INFO: 'tichori-api-keys-v1', LEGACY_GUARD_DOMAIN_NAME: 'TichoriPresenceGuard', LEGACY_INBOX_KEY_MESSAGE_PREFIX: 'Tichori: issue the invoice inbox key',

@@ -3,7 +3,7 @@
 import type { Address, Hex } from 'viem';
 import type { applicationState } from './domain.ts';
 import type { KeyEnvelope } from '../identity-key.ts';
-import type { ObjectProfile } from '../object-profile.ts';
+import type { ObjectProfileV2 } from '../object-profile.ts';
 import type { sessionView } from '../proximity.ts';
 import type { invoiceView } from '../whitechain/domain.ts';
 import type { Evidence, Verification } from '../integrations.ts';
@@ -16,14 +16,16 @@ export type ApplicationState = ReturnType<typeof applicationState> & { storageMo
 export type ApiVault = ApplicationState['groups'][number];
 export type ApiTransaction = ApplicationState['transactions'][number];
 export type MutationAction = 'signup' | 'login' | 'groups' | 'transactions' | 'approve' | 'register-safe';
-export type MutationResponse = ApplicationState & { identityId?: string; keyEnvelope?: KeyEnvelope };
+/** Login of a scanner v2 identity also returns its profile: the client needs it to derive the key's wrapping password. */
+export type MutationResponse = ApplicationState & { identityId?: string; keyEnvelope?: KeyEnvelope; objectProfile?: ObjectProfileV2 };
 export type SafeStatus = { address?: string; balanceWei?: string; balanceEth: string; owners: string[]; threshold: number; chainId?: number; balanceUsdt?: string; guard?: string | null; nonce?: string; rehearsalToken?: boolean };
 
 /** A legacy Base Sepolia Safe deployment recorded in the browser until the wallet transaction confirms. */
 export type PendingSafe = { version: 1; name: string; creatorId: string; owners: `0x${string}`[]; saltNonce: string; address: `0x${string}`; phase: 'awaiting-wallet' | 'submitted'; deploymentTxHash?: Hex };
 export type PreparedVault = Omit<PendingSafe, 'version' | 'phase' | 'deploymentTxHash'> & { chainId: number; threshold: number; transaction: { to: string; data: string; value: string } };
 
-export type ObjectIdentityRecord = { name: string; address: string | null; keyEnvelope: KeyEnvelope; objectProfile: ObjectProfile };
+/** Usernames of scanner v2 object identities. Profiles and key envelopes are never listed. */
+export type ObjectIdentityRecord = { name: string; address: string | null };
 export type ObjectIdentitiesResponse = { identities: ObjectIdentityRecord[]; storageMode: StorageMode };
 
 // ---------- Acoustic proof of attendance ----------

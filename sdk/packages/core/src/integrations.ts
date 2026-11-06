@@ -1,8 +1,11 @@
 /** Server-side integration contracts. Never implement these in a browser component. */
-export type Verification = { accepted: boolean; mode: 'simulated' | 'live'; provider: string };
+import type { ObjectQuery, StoredObjectProfile } from './object-profile.ts';
+/** `score` is the provider's similarity, when it has one (scanner v2 object matching). */
+export type Verification = { accepted: boolean; mode: 'simulated' | 'live'; provider: string; score?: number };
 // References point to a separately reviewed capture system. No images, keys or passphrases.
 export type Evidence = { reference: string; challengeId: string };
-export type ObjectEnrollment = { identityId?: string; address: string; objectName: string };
+/** `objectProfile` is the enrolled scanner v2 profile, when the identity has one. */
+export type ObjectEnrollment = { identityId?: string; address: string; objectName: string; objectProfile?: StoredObjectProfile };
 export type ApprovalContext = {
  identityId: string;
  groupId: string;
@@ -23,7 +26,8 @@ export interface ObjectMatchingProvider {
  readonly id: string;
  readonly mode: 'simulated' | 'live';
  enroll(input: ObjectEnrollment, evidence?: Evidence): Promise<Verification>;
- verify(enrollment: ObjectEnrollment, input: { objectName: string; evidence?: Evidence }): Promise<Verification>;
+ /** Scanner v2 identities send `objectQuery` (the photo's descriptor); description identities send `objectName`. */
+ verify(enrollment: ObjectEnrollment, input: { objectName: string; objectQuery?: ObjectQuery; evidence?: Evidence }): Promise<Verification>;
 }
 export interface PhysicalApprovalProvider {
  readonly id: string;

@@ -4,6 +4,7 @@ import type {
  MutationAction, MutationResponse, ObjectIdentitiesResponse, PreparedVault, ProximityResponse, RelayerStatus, SafeStatus,
  StartSessionResponse, Verification,
 } from '@tijori/core/api/types';
+import type { ObjectQuery } from '@tijori/core/object-profile';
 
 export type * from '@tijori/core/api/types';
 export type TijoriClientOptions = {
@@ -42,6 +43,8 @@ export function createTijoriClient(options: TijoriClientOptions | string = {}, l
   state: (identityId?: string) => request<ApplicationState>(identityId ? withQuery('state', { identityId }) : 'state'),
   balance: (vaultId: string) => request<SafeStatus>(withQuery('balance', { vaultId })),
   mutate: (action: MutationAction, body: object, operationId: string) => request<MutationResponse>(paths[action], body, { operationId }),
+  /** Scanner v2 login: the server matches the photo and, only on a match, returns the key envelope and profile. */
+  objectLogin: (username: string, objectQuery: ObjectQuery, operationId: string) => request<MutationResponse>('identities/login', { username, objectQuery }, { operationId }),
   /** Enrolled object identities (encrypted key envelopes and compact reference profiles) for sign-in on a new device. */
   objectIdentities: () => request<ObjectIdentitiesResponse>('object-identities'),
   discover: (identityId: string, groupId: string, evidence?: Evidence) => request<{ requests: ApiTransaction[]; verification: Verification }>('physical-approvals/discover', { identityId, groupId, evidence }),
@@ -52,7 +55,8 @@ export function createTijoriClient(options: TijoriClientOptions | string = {}, l
   propose: (body: { vaultId: string; proposerId: string; to?: string; amount?: string; note?: string; invoiceId?: string }, operationId: string) => request<MutationResponse & { proposalId?: string }>('proposals', body, { operationId }),
   startSession: (proposalId: string, initiatorId: string) => request<StartSessionResponse>('approval-sessions', { proposalId, initiatorId }),
   sessions: (identityId: string) => request<{ sessions: ApprovalSession[] }>(withQuery('treasury/sessions', { identityId })),
-  approveInSession: (body: { sessionId: string; walletId: string; objectName: string; signature: string; evidence: Evidence }) => request<ApproveInSessionResponse>('physical-approvals', body),
+  /** Scanner v2 identities send `objectQuery` (a fresh photo's descriptor); older passphrase identities send `objectName`. */
+  approveInSession: (body: { sessionId: string; walletId: string; objectName: string; objectQuery?: ObjectQuery; signature: string; evidence: Evidence }) => request<ApproveInSessionResponse>('physical-approvals', body),
   inboxKey: (body: { vaultId: string; identityId: string; issuedAt: string; signature: string }) => request<InboxKeyResponse>('vaults/inbox-key', body),
   relayer: () => request<RelayerStatus>('relayer'),
   invoiceReceipt: async (id: string) => (await request<{ invoice: InvoiceReceipt }>(withQuery('invoices/receipt', { id }))).invoice,

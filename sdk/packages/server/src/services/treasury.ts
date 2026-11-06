@@ -5,7 +5,9 @@ import { applyAction, VaultError, type Vault } from '@tijori/core/vault';
 import { currentProviders, emit, setting, waitUntil } from '../context.ts';
 import '../providers.ts';
 import { IntegrationUnavailableError } from '@tijori/core/integrations';
-import { applicationState } from '@tijori/core/api/domain';
+import { validObjectQuery } from '@tijori/core/object-profile';
+import { applicationState, REENROLL_MESSAGE } from '@tijori/core/api/domain';
+import { LEGACY_DINO_OBJECT_NAME } from '@tijori/core/legacy';
 import type { ApprovalSession, InboxKeyResponse, InvoiceReceipt, RelayerStatus, StartSessionResponse } from '@tijori/core/api/types';
 import { WHITECHAIN_CHAIN_ID, explorerTx, formatUsdt } from '@tijori/core/whitechain/chain';
 import { isRehearsalToken, isTreasuryConfigured, treasuryConfig, usdtAddress, whitechainClient } from '../whitechain/config.ts';
@@ -166,10 +168,11 @@ export async function approveInSession(body: Record<string, unknown>) {
   if (!proposal || proposal.status !== 'pending') throw new VaultError('This proposal is no longer pending.');
   const { wallet } = memberWallet(vault, session.vaultId, walletId);
   if (!wallet.address || !wallet.object_name) throw new VaultError('Only enrolled identities can approve.');
+  if (wallet.object_name === LEGACY_DINO_OBJECT_NAME) throw new VaultError(REENROLL_MESSAGE);
   const retry = session.approvals.some(a => a.walletId === walletId);
   if (retry && session.approvals.length < session.threshold) throw new VaultError('You already approved in this session.');
   // 1. Personal object, verified fresh for this approval.
-  const object = await currentProviders().objectMatching.verify({ identityId: wallet.id, address: wallet.address, objectName: wallet.object_name }, { objectName: str(body.objectName, 500), evidence: evidenceOf(body.objectEvidence) });
+  const object = await currentProviders().objectMatching.verify({ identityId: wallet.id, address: wallet.address, objectName: wallet.object_name, ...(wallet.objectProfile ? { objectProfile: wallet.objectProfile } : {}) }, { objectName: str(body.objectName, 500), ...(validObjectQuery(body.objectQuery) ? { objectQuery: body.objectQuery } : {}), evidence: evidenceOf(body.objectEvidence) });
   if (!object.accepted) throw new VaultError('Your personal object did not match.');
   // 2. Physically present in this session (same room, same time window).
   const presence = await currentProviders().presence.verify({ sessionId, vaultId: session.vaultId, identityId: wallet.id, safeTxHash: session.safeTxHash, challenge: session.challenge }, evidenceOf(body.evidence));

@@ -3,8 +3,9 @@
 // (ggwave WASM) through loadAcousticModem() or the '@tijori/client/acoustic-modem' subpath.
 export * from './api.ts';
 export * from './assets.ts';
-export { extractObjectFeatures, type ExtractOptions } from './object-features.ts';
-export type { ObjectPoint } from './object-isolation.ts';
+export { extractObjectFeatures, extractObjectDescriptors, type ExtractOptions, type DescriptorOptions } from './object-features.ts';
+export { CENTRE, OBJECT_NOT_FOUND, PATCH_GRID, poolForeground, FOREGROUND_COVERAGE, regionAt, squareCrop, type ObjectScanResult } from './object-geometry.ts';
+export type { ObjectPoint } from './object-geometry.ts';
 export * from './dino-wallet.ts';
 export * from './device-identities.ts';
 export * from './session-signer.ts';

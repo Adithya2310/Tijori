@@ -15,7 +15,8 @@
     "test:whitechain": "forge build --root ../contracts && node --conditions=@tijori/source --experimental-strip-types tests/whitechain-flow.mjs",
     "arkiv": "node --conditions=@tijori/source --experimental-strip-types packages/server/src/cli.ts arkiv",
     "changeset": "changeset",
-    "release": "npm run build && changeset publish"
+    "release": "npm run build && changeset publish",
+    "calibrate": "node --conditions=@tijori/source --experimental-strip-types scripts/calibrate.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.1",

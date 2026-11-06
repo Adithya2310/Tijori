@@ -17,13 +17,15 @@ test('remembered identity survives reopening storage, reuses a pending key, and 
  const [restored] = await listDeviceIdentities();
  assert.equal(restored.status, 'pending');
  assert.equal(restored.recovery.address, recovery.address);
- assert.ok((await verifyObjectRecovery(restored.recovery, photo)).matched);
+ assert.ok((await verifyObjectRecovery(restored.recovery as Extract<typeof restored.recovery, { features: unknown }>, photo)).matched);
  await saveDeviceIdentity({ ...restored, status: 'registered' });
  const saved = await listDeviceIdentities();
  assert.equal(saved.length, 1, 'updating registration must not generate/duplicate an identity');
  assert.equal(saved[0].status, 'registered');
  for (let i = 0; i < 257; i++) { tokens[i * 384] = 0; tokens[i * 384 + 1] = 1; }
- await assert.rejects(verifyObjectRecovery(saved[0].recovery, featuresFromTokens(tokens, [1, 257, 384])), /did not match/);
+ const v1 = saved[0].recovery;
+ assert.equal(v1.version, 1);
+ await assert.rejects(verifyObjectRecovery(v1 as Extract<typeof v1, { features: unknown }>, featuresFromTokens(tokens, [1, 257, 384])), /did not match/);
  assert.throws(() => validateDeviceIdentity({ ...pending, recovery: {} }), /Invalid/);
  Object.defineProperty(globalThis, 'indexedDB', { value: undefined, configurable: true });
  await assert.rejects(saveDeviceIdentity(pending), /storage is unavailable/);

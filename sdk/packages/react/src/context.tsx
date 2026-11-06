@@ -1,20 +1,22 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
- configureAssets, createTijoriClient, listDeviceIdentities, listServerIdentities, setSessionSigner, unlockObjectIdentityAccount,
- type ApplicationState, type MutationAction, type ObjectRecovery, type TijoriClient,
+ configureAssets, createTijoriClient, listDeviceIdentities, listObjectUsernames, setSessionSigner, unlockObjectIdentityAccount, unlockObjectIdentityV2,
+ type ApplicationState, type MutationAction, type ObjectRecovery, type ObjectRecoveryV2, type TijoriClient,
 } from '@tijori/client';
 import { unlockIdentityAccount, type KeyEnvelope } from '@tijori/core/identity-key';
-import type { ObjectProfile } from '@tijori/core/object-profile';
 
 // Session keys are persisted in existing browsers; keep their values (see @tijori/core/legacy).
-const SESSION_KEY = 'pv-session', OPERATION_KEY = 'pv-operation', PENDING_IDENTITY_KEY = 'pv-pending-identity';
+const SESSION_KEY = 'pv-session', OPERATION_KEY = 'pv-operation', PENDING_IDENTITY_KEY = 'pv-pending-identity', KIND_KEY = 'tj-identity-kind';
+/** How the signed-in identity proves itself: a scanned object (scanner v2) or an older passphrase identity. */
+export type IdentityKind = 'object' | 'passphrase';
 
 export type TijoriTheme = Partial<Record<'ink' | 'muted' | 'accent' | 'line' | 'background' | 'font' | 'fontDisplay', string>>;
 /** Ultrasonic presence integration: resolve with the room code heard for a challenge. */
 export type PresenceListener = { listen(challengeId: string): Promise<string> };
 export type PresenceEmit = { challengeId: string; code: string; expiresAt: string };
-export type ObjectIdentityBody = { name?: string; address: string; objectName: string; keyEnvelope?: KeyEnvelope; objectProfile?: ObjectProfile };
+/** Sign-up body (name, address, key envelope, v2 profile) or login body (username + photo descriptor). */
+export type ObjectIdentityBody = Record<string, unknown>;
 export type TijoriIdentity = ApplicationState['wallets'][number];
 
 export type TijoriProviderProps = {
@@ -54,9 +56,11 @@ export type TijoriContextValue = {
  setData(state: ApplicationState): void;
  refresh(): Promise<boolean>;
  /** Idempotent mutation with retry-safe operation IDs. Returns false (and sets `error`) on failure. */
- mutate(action: MutationAction, body: object, message: string, unlock?: { recovery?: ObjectRecovery; passphrase?: string }): Promise<boolean>;
+ mutate(action: MutationAction, body: object, message: string, unlock?: { recovery?: ObjectRecovery | ObjectRecoveryV2; passphrase?: string }): Promise<boolean>;
  /** Submit an object sign-up or sign-in produced by <ObjectIdentityForm>. */
- submitObjectIdentity(mode: 'signup' | 'login', body: ObjectIdentityBody, recovery: ObjectRecovery): Promise<boolean>;
+ submitObjectIdentity(mode: 'signup' | 'login', body: ObjectIdentityBody, recovery?: ObjectRecoveryV2): Promise<boolean>;
+ /** 'object' for scanner v2 identities, 'passphrase' for older passphrase identities, null when unknown. */
+ identityKind: IdentityKind | null;
  /** Run work with `busy` set and errors captured into `error`. */
  run(work: () => Promise<void>): Promise<boolean>;
  signOut(): void;
@@ -87,6 +91,7 @@ export function TijoriProvider({ children, baseUrl, client: given, assetBaseUrl,
  const [initialAuthMode, setInitialAuthMode] = useState<'signup' | 'login'>('signup');
  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
  const [pauses, setPauses] = useState(0);
+ const [identityKind, setIdentityKind] = useState<IdentityKind | null>(() => (session.get(KIND_KEY) as IdentityKind | null) ?? null);
  const stateRequest = useRef(0);
  const localStorageMode = data.storageMode === 'local';
 
@@ -97,8 +102,8 @@ export function TijoriProvider({ children, baseUrl, client: given, assetBaseUrl,
    if (!live) return;
    setData(result); setIdentityId(remembered);
    try {
-    const known = [...await listDeviceIdentities(), ...await listServerIdentities(client)];
-    if (live && known.some(item => item.status === 'registered') && !known.some(item => item.status === 'pending')) setInitialAuthMode('login');
+    const [device, server] = await Promise.all([listDeviceIdentities(), listObjectUsernames(client)]);
+    if (live && (server.length > 0 || device.some(item => item.status === 'registered')) && !device.some(item => item.status === 'pending' && item.recovery.version === 2)) setInitialAuthMode('login');
    } catch { /* no saved identities */ }
    if (live) setLoaded(true);
   }).catch(() => { if (live) { setError('Could not load storage. Check the server configuration and reload.'); setLoaded(true); } });
@@ -139,10 +144,19 @@ export function TijoriProvider({ children, baseUrl, client: given, assetBaseUrl,
    session.set(OPERATION_KEY, JSON.stringify(operation));
    const result = await client.mutate(action, body, operation.id);
    // The unlocked identity key signs Whitechain approvals. It stays in this tab's memory only.
+   let kind: IdentityKind | null = null;
    if (action === 'login') {
-    if (unlock.recovery) setSessionSigner(await unlockObjectIdentityAccount(unlock.recovery, result.keyEnvelope as KeyEnvelope));
-    else if (unlock.passphrase !== undefined) setSessionSigner(await unlockIdentityAccount((body as { address: string }).address, result.keyEnvelope as KeyEnvelope, unlock.passphrase));
-   } else if (action === 'signup' && unlock.recovery) setSessionSigner(await unlockObjectIdentityAccount(unlock.recovery, unlock.recovery.keyEnvelope));
+    if (result.objectProfile) {
+     // Scanner v2: the server matched the photo and released the profile that derives the key's wrapping password.
+     const address = result.wallets.find(w => w.id === result.identityId)?.address;
+     if (!address) throw new Error('The server did not return your identity.');
+     setSessionSigner(await unlockObjectIdentityV2(address, result.keyEnvelope as KeyEnvelope, result.objectProfile)); kind = 'object';
+    } else if (unlock.passphrase !== undefined) { setSessionSigner(await unlockIdentityAccount((body as { address: string }).address, result.keyEnvelope as KeyEnvelope, unlock.passphrase)); kind = 'passphrase'; }
+   } else if (action === 'signup' && unlock.recovery) {
+    setSessionSigner(unlock.recovery.version === 2 ? await unlockObjectIdentityV2(unlock.recovery.address, unlock.recovery.keyEnvelope, unlock.recovery.objectProfile) : await unlockObjectIdentityAccount(unlock.recovery, unlock.recovery.keyEnvelope));
+    kind = 'object';
+   }
+   if (kind) { session.set(KIND_KEY, kind); setIdentityKind(kind); }
    if (action === 'signup') session.remove(PENDING_IDENTITY_KEY);
    session.remove(OPERATION_KEY); setData(result);
    if (result.identityId) { setIdentityId(result.identityId); session.set(SESSION_KEY, result.identityId); }
@@ -153,14 +167,9 @@ export function TijoriProvider({ children, baseUrl, client: given, assetBaseUrl,
  }, [client]);
 
  const submitObjectIdentity = useCallback<TijoriContextValue['submitObjectIdentity']>(async (mode, body, recovery) => {
-  if (mode === 'signup') {
-   try {
-    const stored = session.get(PENDING_IDENTITY_KEY), pending = stored ? JSON.parse(stored) : null;
-    if (pending && JSON.stringify(pending) !== JSON.stringify(body)) throw Error('A signup is awaiting confirmation. Resume its remembered identity and original name, or restore its backup before retrying.');
-    session.set(PENDING_IDENTITY_KEY, JSON.stringify(body));
-   } catch (e) { setError(e instanceof Error ? e.message : 'Could not preserve the pending signup.'); return false; }
-  }
-  return mutate(mode, body, mode === 'signup' ? 'Identity created. This browser remembers your object.' : 'Object matched. Welcome back.', { recovery });
+  // Identical retries reuse the operation ID (see mutate); the server rejects duplicate usernames and addresses.
+  if (mode === 'signup') session.set(PENDING_IDENTITY_KEY, JSON.stringify(body));
+  return mutate(mode, body, mode === 'signup' ? 'Identity created. Log in any time with your username and object.' : 'Object matched. Welcome back.', { recovery });
  }, [mutate]);
 
  const run = useCallback(async (work: () => Promise<void>) => {
@@ -169,13 +178,13 @@ export function TijoriProvider({ children, baseUrl, client: given, assetBaseUrl,
  }, []);
 
  const signOut = useCallback(() => {
-  setSessionSigner(null); session.remove(SESSION_KEY); setIdentityId(''); setError(''); setNotice(''); setInitialAuthMode('login');
+  setSessionSigner(null); session.remove(SESSION_KEY); session.remove(KIND_KEY); setIdentityKind(null); setIdentityId(''); setError(''); setNotice(''); setInitialAuthMode('login');
  }, []);
  const pausePolling = useCallback(() => { setPauses(n => n + 1); let resumed = false; return () => { if (!resumed) { resumed = true; setPauses(n => n - 1); } }; }, []);
 
  const value: TijoriContextValue = {
   client, data, identity: data.wallets.find(w => w.id === identityId), identityId, loaded, initialAuthMode, localStorageMode,
-  busy, error, notice, setError, setNotice, setData, refresh, mutate, submitObjectIdentity, run, signOut, pausePolling,
+  busy, error, notice, setError, setNotice, setData, refresh, mutate, submitObjectIdentity, run, signOut, pausePolling, identityKind,
   receiptUrl: receiptUrl ?? (id => `/invoice/${id}`), presence, onPresenceEmit,
  };
  const style: Record<string, string> = {};

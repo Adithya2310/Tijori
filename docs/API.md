@@ -108,7 +108,27 @@ Run `npm run build`, then `npm test`, then `npm run lint`. Tests use local fixtu
 
 ## Browser object-profile integration
 
-DINOv2/SlimSAM processing remains on-device and separate from the server-side simulated object provider. Signup may include a validated `objectProfile`; the server provider hook still runs before mutation. `/api/object-identities` and `/api/v1/object-identities` expose compact profiles and encrypted envelopes for the explicitly insecure object-only flow. State responses include `storageMode` and an enrolled public `peers` directory; v1 wallets/groups/transactions retain identity scoping. Profiles never appear in normal state. Both API aliases use `withState`, honoring explicit local mode and Arkiv by default; local mode rejects Safe preparation/registration. The profile endpoint is unauthenticated and supplies wrapping material, so this is not secure authentication or key custody. Do not expose Arkiv mode publicly.
+### Object identities (scanner v2)
+
+DINOv2 and SlimSAM run on the device. The server only compares descriptors, using the `dino-object-v2` provider.
+
+| Method | Path | Body | Result |
+|---|---|---|---|
+| POST | `/identities` (sign-up) | `name` (the username, unique ignoring case), `address`, `keyEnvelope`, `objectName: "dino-object-v2"`, `objectProfile` (v2: `{ version: 2, encoding: "dinov2-fg-q8", model, revision, views: string[] }`, 1–5 views of 1024 base64 characters each) | State plus `identityId`. A v1 profile is refused ("older Tijori version"). |
+| POST | `/identities/login` | `username` and `objectQuery` (`{ version: 2, encoding, model, revision, view }`, one photo) | On a match: state plus `identityId`, `keyEnvelope` and `objectProfile` (needed to derive the wrapping password).<br>Otherwise 400 with no key material. |
+| GET | `/object-identities` | — | `{ identities: [{ name, address }], storageMode }`. Usernames only: never profiles or envelopes. |
+
+Login errors:
+- a wrong object returns 400 "This is not the object registered for this username";
+- more than 5 wrong objects within 10 minutes for one identity are refused until the window passes;
+- unknown usernames are refused;
+- scanner v1 identities get "Sign up again with a new scan".
+
+Approvals: `physical-approvals` with a `sessionId` also accepts `objectQuery` for scanner v2 identities.
+
+Passphrase identities keep `address` plus `objectName`. The match tells different objects apart; it is not authentication.
+
+State responses include `storageMode` and an enrolled public `peers` directory; v1 wallets/groups/transactions retain identity scoping. Profiles never appear in normal state. Both API aliases use `withState`, honoring explicit local mode and Arkiv by default; local mode rejects Safe preparation/registration. The profile endpoint is unauthenticated and supplies wrapping material, so this is not secure authentication or key custody. Do not expose Arkiv mode publicly.
 
 ## Whitechain treasury endpoints
 

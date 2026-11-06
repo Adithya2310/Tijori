@@ -1,4 +1,4 @@
-import { validObjectProfile, unpackObjectProfile, type ObjectProfile } from '@tijori/core/object-profile';
+import { validObjectProfile, unpackObjectProfile, validObjectProfileV2, type ObjectProfile, type ObjectProfileV2 } from '@tijori/core/object-profile';
 import { compareDinoFeatures, validDinoFeatures, type DinoFeatures } from '@tijori/core/dino';
 import { LEGACY_OBJECT_RECOVERY_KIND, LEGACY_OBJECT_WRAP_DOMAIN } from '@tijori/core/legacy';
 import { generateIdentity, unlockIdentity, unlockIdentityAccount, validKeyEnvelope, type KeyEnvelope } from '@tijori/core/identity-key';
@@ -43,8 +43,34 @@ export async function unlockObjectIdentityAccount(recovery: ObjectRecovery, enve
  if (!validKeyEnvelope(envelope) || (['version', 'salt', 'iv', 'ciphertext'] as const).some(key => envelope[key] !== recovery.keyEnvelope[key])) throw Error('The recovery file does not match this stored identity.');
  return unlockIdentityAccount(recovery.address, envelope, await wrappingPassword(recovery.features, recovery.objectProfile));
 }
-export function downloadObjectRecovery(recovery: ObjectRecovery) {
+export function downloadObjectRecovery(recovery: ObjectRecovery | ObjectRecoveryV2) {
  const url = URL.createObjectURL(new Blob([JSON.stringify(recovery)], { type: 'application/json' }));
  const link = document.createElement('a'); link.href = url; link.download = `tijori-object-demo-${recovery.address}.json`;
  link.click(); setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+// ---------- Scanner v2 identities ----------
+// The key is still wrapped with a password derived from the object profile (insecure demo by design), but the
+// profile now stays on the server and is released only after a successful server-side object match at login.
+export type ObjectRecoveryV2 = { version: 2; kind: typeof LEGACY_OBJECT_RECOVERY_KIND; address: string; keyEnvelope: KeyEnvelope; objectProfile: ObjectProfileV2 };
+async function wrappingPasswordV2(profile: ObjectProfileV2) {
+ const canonical = [profile.version, profile.encoding, profile.model, profile.revision, profile.views];
+ const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(LEGACY_OBJECT_WRAP_DOMAIN + JSON.stringify(canonical)));
+ return Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('');
+}
+/** Create a new random identity for a scanner v2 profile. Save it on the device before signing up (retry-safe). */
+export async function createObjectIdentityV2(objectProfile: ObjectProfileV2): Promise<ObjectRecoveryV2> {
+ if (!validObjectProfileV2(objectProfile)) throw Error('Scan your object first.');
+ const identity = await generateIdentity(await wrappingPasswordV2(objectProfile));
+ return { version: 2, kind: LEGACY_OBJECT_RECOVERY_KIND, ...identity, objectProfile };
+}
+/** Unlock the in-memory signer with the profile the server released after a successful object match. */
+export async function unlockObjectIdentityV2(address: string, envelope: KeyEnvelope, objectProfile: ObjectProfileV2) {
+ if (!validKeyEnvelope(envelope) || !validObjectProfileV2(objectProfile)) throw Error('The server did not return a valid identity.');
+ return unlockIdentityAccount(address, envelope, await wrappingPasswordV2(objectProfile));
+}
+export function parseObjectRecoveryV2(value: unknown): ObjectRecoveryV2 {
+ const v = value as ObjectRecoveryV2;
+ if (!v || v.version !== 2 || v.kind !== LEGACY_OBJECT_RECOVERY_KIND || typeof v.address !== 'string' || !/^0x[0-9a-f]{40}$/.test(v.address) || !validKeyEnvelope(v.keyEnvelope) || !validObjectProfileV2(v.objectProfile)) throw Error('Invalid or incompatible object identity record.');
+ return { version: 2, kind: LEGACY_OBJECT_RECOVERY_KIND, address: v.address, keyEnvelope: { version: 1, salt: v.keyEnvelope.salt, iv: v.keyEnvelope.iv, ciphertext: v.keyEnvelope.ciphertext }, objectProfile: v.objectProfile };
 }

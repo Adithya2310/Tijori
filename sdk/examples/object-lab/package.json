@@ -1,0 +1,20 @@
+{
+  "name": "tijori-example-object-lab",
+  "private": true,
+  "type": "module",
+  "description": "Developer tool: capture labelled object descriptors to calibrate Tijori's scanner v2 matching threshold.",
+  "scripts": {
+    "assets": "tijori-client prepare-assets public/tijori-assets",
+    "dev": "npm run assets && next dev --hostname 127.0.0.1 --port 3300",
+    "build": "npm run assets && next build",
+    "start": "next start --hostname 127.0.0.1 --port 3300"
+  },
+  "dependencies": {
+    "@tijori/client": "0.1.0",
+    "@tijori/core": "0.1.0",
+    "@tijori/react": "0.1.0",
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

@@ -2,6 +2,7 @@
 export * from './vault.ts';
 export { proximityMember, latestSession, sessionView as proximitySessionView, applyProximity, validateProximity, type ProximitySession } from './proximity.ts';
 export * from './object-profile.ts';
+export * from './object-match.ts';
 export * from './dino.ts';
 export * from './identity-key.ts';
 export * from './types.ts';

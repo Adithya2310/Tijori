@@ -1,5 +1,7 @@
 import { isAddress } from 'viem';
-import { applyAction, publicState, VaultError, type Vault } from '../vault.ts';
+import { applyAction, isObjectIdentityV2, objectIdentityByUsername, publicState, VaultError, type Vault } from '../vault.ts';
+import { validObjectProfileV2, validObjectQuery, type ObjectQuery } from '../object-profile.ts';
+import { LEGACY_DINO_OBJECT_NAME } from '../legacy.ts';
 import type { Evidence, IntegrationProviders } from '../integrations.ts';
 
 export const requiredApprovals = (members: number) => Math.floor(members / 2) + 1;
@@ -33,10 +35,29 @@ export function applicationState(vault: Vault, identityId?: string) {
   invoices: state.invoices.filter(i => visible.has(i.group_id)),
  };
 }
+/** Message for object identities enrolled with scanner v1 (0.1.x), which matched objects in the browser only. */
+export const REENROLL_MESSAGE = 'This object identity was created with an older scanner. Sign up again with a new scan of your object.';
 export async function verifyObject(vault: Vault, body: Record<string, unknown>, integrations: IntegrationProviders) {
+ // Scanner v2: username + the login photo's descriptor, matched on the server against the enrolled profile.
+ if (body.username !== undefined || body.objectQuery !== undefined) {
+  const username = typeof body.username === 'string' ? body.username.trim() : '';
+  if (!username) throw new VaultError('Enter your username.');
+  const enrollment = objectIdentityByUsername(vault, username);
+  if (!enrollment) {
+   const legacy = vault.wallets.some(w => w.keyEnvelope && w.object_name === LEGACY_DINO_OBJECT_NAME && w.name.trim().toLowerCase() === username.toLowerCase());
+   throw new VaultError(legacy ? REENROLL_MESSAGE : 'No object identity uses this username. Check it, or sign up first.');
+  }
+  if (!validObjectQuery(body.objectQuery)) throw new VaultError('Take a photo of your object first.');
+  const result = await integrations.objectMatching.verify({ identityId: enrollment.id, address: enrollment.address!, objectName: enrollment.object_name, objectProfile: enrollment.objectProfile }, { objectName: '', objectQuery: body.objectQuery as ObjectQuery });
+  if (!result.accepted) throw new VaultError('This is not the object registered for this username. Show the same object and try again.');
+  return { identityId: enrollment.id, verification: result };
+ }
  const address = typeof body.address === 'string' ? body.address.trim().toLowerCase() : '';
  const enrollment = vault.wallets.find(w => w.address === address && w.keyEnvelope && w.object_name);
  if (!enrollment || !isAddress(address)) throw new VaultError('Address or object did not match an encrypted identity.');
+ // Object identities never log in through the description path.
+ if (enrollment.object_name === LEGACY_DINO_OBJECT_NAME) throw new VaultError(REENROLL_MESSAGE);
+ if (isObjectIdentityV2(enrollment)) throw new VaultError('Log in with your username and a photo of your object.');
  const result = await integrations.objectMatching.verify({ identityId: enrollment.id, address, objectName: enrollment.object_name }, { objectName: typeof body.objectName === 'string' ? body.objectName : '', evidence: evidenceFrom(body.evidence) });
  if (!result.accepted) throw new VaultError('Address or object did not match an encrypted identity.');
  return { identityId: enrollment.id, verification: result };
@@ -58,7 +79,7 @@ export async function applyIntegratedAction(vault: Vault, action: string, body: 
   const address = typeof body.address === 'string' ? body.address.trim().toLowerCase() : '';
   const objectName = typeof body.objectName === 'string' ? body.objectName.trim() : '';
   if (!isAddress(address) || !objectName) throw new VaultError('Enter a valid address and object description.');
-  const result = await integrations.objectMatching.enroll({ address, objectName }, evidenceFrom(body.evidence));
+  const result = await integrations.objectMatching.enroll({ address, objectName, ...(validObjectProfileV2(body.objectProfile) ? { objectProfile: body.objectProfile } : {}) }, evidenceFrom(body.evidence));
   if (!result.accepted) throw new VaultError('Object enrollment was not verified.');
  }
  if (action === 'login') return (await verifyObject(vault, body, integrations)).identityId;

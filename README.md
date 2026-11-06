@@ -34,7 +34,7 @@ The SDK is developed in [`sdk/`](sdk). It has its own install, tests, examples a
 
 A DAO site or marketplace can add object sign-in, gasless Whitechain vaults with co-present approvals, and acoustic attendance with one backend route and one component. See [docs/SDK.md](docs/SDK.md) and the runnable [sdk/examples/dao-site](sdk/examples/dao-site).
 
-New identities use a real browser-side DINOv2 object-matching experiment adapted from VILA. The photo check is bypassable and provides no secure authentication or wallet recovery. Existing passphrase identities retain their original login path. Acoustic checks use real ggwave WASM, browser audio and opt-in microphone access, with sessions and matches persisted in the encrypted Arkiv aggregate. A match is a cooperative demo, not proof of physical proximity or identity; challenges can be replayed or relayed. Existing demo vaults and their requests remain simulated. New Safe vaults have real testnet contracts and signer-enforced thresholds; their transactions are handled in the Safe app, not by the demo approval flow. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
+New identities are a username linked to a personal object: the browser computes DINOv2 descriptors of the isolated object, and the server matches the login photo against the enrolled object before releasing any key material (see "Object sign-in" below). It distinguishes different objects but is not secure authentication. Existing passphrase identities retain their original login path. Acoustic checks use real ggwave WASM, browser audio and opt-in microphone access, with sessions and matches persisted in the encrypted Arkiv aggregate. A match is a cooperative demo, not proof of physical proximity or identity; challenges can be replayed or relayed. Existing demo vaults and their requests remain simulated. New Safe vaults have real testnet contracts and signer-enforced thresholds; their transactions are handled in the Safe app, not by the demo approval flow. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
 
 ## Wi-Fi acoustic testing without Arkiv
 
@@ -224,39 +224,47 @@ After configuring Arkiv as above, run `npm run dev:phone` and open https://local
 
 Run `npm run sdk:test` for the SDK, `npm run build` before `npm test` for the app, then `npm run lint`. Tests use throwaway local RPC fixtures and isolated journal directories, not live funds. They cover actual ggwave WASM waveform encoding/decoding, microphone cleanup, schema upgrades, read-only SQLite import, encrypted storage, membership/isolation, expiry/replay rejection, concurrent starts/matches, idempotency, restart persistence and uncertain-write reconciliation. Real speaker-to-microphone behavior still depends on device volume, permissions, hardware and room acoustics and requires a two-device check.
 
-## Object-only DINOv2 experiment
+## Object sign-in (scanner v2, SDK 0.2.0)
 
-This branch intentionally implements an **insecure object-only demo**, as requested. It is not a WebAuthn passkey implementation. A new private key is random, not derived from a photograph. Its existing v1 encrypted envelope is wrapped using a SHA-256 digest of the enrolled feature template as an internal wrapping password. The browser’s IndexedDB identity record (and optional recovery JSON) includes both that template and the encrypted envelope: **possession of the file is sufficient to decrypt the private key without any photo**. Encryption adds no protection against a file holder. Do not fund this identity or use sensitive objects/photos. There is no liveness detection, replay protection, calibrated false-accept rate or trusted authorization boundary.
+An identity is a **username linked to a personal object**. You log in with the username and one photo of the same object, taken from any reasonable side. The **server** decides whether the photo matches, and a different object is refused.
 
-1. Enter a synthetic name, opt into processing and choose/take an object photo and tap the foreground object. SlimSAM isolates it, then DINOv2 scans it automatically; the preview stays local. Click **Register object & create identity**. The app saves a pending browser record before signup and stores the new compact reference and encrypted key through the selected server adapter, so no recovery-file download is required. Storage errors block signup instead of creating a user without a remembered reference.
-2. To log in again, select the identity retrieved from the server (or a remembered browser-only legacy identity) (automatically selected when there is one), then choose/take a photo of the same object. Scanning starts automatically. Click **Match object & log in**. A mismatch blocks the UI; the API must still return the matching original encrypted envelope. Missing server state is never recreated.
-3. Under **Optional backup / move an existing identity**, export a backup or import an older recovery JSON once. Imported users are remembered for subsequent photo-only login. New browsers/devices retrieve new compact profiles from the selected server; older browser-only identities need the optional backup on a new origin; a photograph alone cannot recover its random private key. Existing passphrase identities retain their original login path.
-4. Pending signup references and names persist locally before the request. Reload the same tab, show the same object, and retry using the same pending key/operation ID. Closing the tab still loses the session operation ID; reconcile uncertain writes rather than blindly resubmitting. Clearing site data removes the remembered reference. Backups are optional for the everyday flow but are needed if that reference is lost. Enrollment in one browser does not silently enroll other devices.
+**Flow**
+1. **Sign up:**
+   1. Enter a username.
+   2. Open the camera, hold the object in the circle and tap **Scan object**.
+   3. Turn the object slowly for about 2 seconds while three angles are captured automatically. There is no tapping or dragging: the object at the centre is isolated for you.
+   4. Click **Register username & object**.
+2. **Log in:** enter the username, take one photo of the object and click **Log in with my object**.
+3. Payout approvals in a Whitechain vault ask for one fresh photo too. It is checked on the server together with presence and your own signature.
 
-This follows VILA’s register-scene → authenticate-new-photo interaction, with browser persistence added for reloads. VILA’s own web demo holds its reference in memory; it does not implement durable wallet recovery. Photos are discarded on leaving the form; only versioned features, encrypted key envelopes, synthetic names and pending/registered status are persisted locally. No plaintext private key or user passphrase is stored. Anyone with the saved browser data or optional backup can bypass the image check. The server-side v5 schema adds only compact object profiles; public identity metadata, compact versioned references and encrypted key envelopes go to the selected encrypted server storage.
+**How matching works**
+1. **On this device:**
+   - SlimSAM isolates the object at the centre of each photo. It keeps the whole object that contains the centre point, pads it to a square on white and never stretches it.
+   - DINOv2-small then produces two vectors: the CLS token, and the mean of the patch tokens that cover the object. The background is excluded.
+   - Photos and masks never leave the browser. Only these descriptors (about 1 KB per view) are sent.
+2. **On the server (`@tijori/server`):**
+   - At login, the server compares the photo's descriptor with the enrolled views: `score = w·cos(CLS) + (1 − w)·cos(object)`.
+   - The identity matches when the best view reaches the threshold (`OBJECT_MATCH_CLS_WEIGHT` and `OBJECT_MATCH_THRESHOLD` in `@tijori/core/object-match`, calibrated with real photos).
+   - Only on a match does the server return the encrypted key envelope and the profile that derives its wrapping password.
+   - Wrong-object attempts are throttled (5 per 10 minutes per identity).
+   - `/api/v1/object-identities` lists usernames only.
 
-Model: `Xenova/dinov2-small`, pinned revision `c2bb04a51fab207c420665f1946016107bffc701`, fp32, RGB resized directly to 224 × 224 with ImageNet normalization; 384 CLS dimensions and 256 patch vectors. The score is adapted from [VILA](https://github.com/marcociama/VILA); see [third-party notices](THIRD_PARTY_NOTICES.md). GroundingDINO/SAM segmentation and attention visualization are not ported: manually frame the object against a simple background. Browser resizing/ONNX can differ from VILA’s Python preprocessing and scores; thresholds need real-world calibration. Recovery files are versioned and reject incompatible model revisions.
+**Limits (it is a demo, not authentication)**
+- It tells different objects apart (a pen is not a bottle; two different bottles usually differ). Identical objects of the same model look the same.
+- Anyone holding a stored profile (the server operator, or someone with server data or a backup file) can unlock the key without the object.
+- The API is unauthenticated, and descriptors could be replayed by a client that has one.
 
-Only the preparation script on the laptop/build host contacts Hugging Face for the pinned public model; its downloads are resumable and verified before publication. The phone loads models/configuration and the matching installed WASM runtime from the app’s own origin. No photos or masks are transmitted. New compact reference templates are sent only to the selected server store, then encrypted inside its aggregate. Versioned public model/runtime files and browser model caches can be reused across retries. The download watchdog detects five minutes without progress rather than imposing a five-minute total deadline. Clearing site data removes model caches; the recovery file remains wherever you saved it. Recovery files and `.env*` secrets are Git-ignored. Keep them outside the source tree and never upload them to GitHub.
+Use synthetic names and test funds only.
 
-The inference worker can be served by a Vercel-hosted frontend; it requires no Python or inference server. **The full app is not ready to deploy publicly on Vercel.** Its unauthenticated paid-write API and Arkiv signer lock/journal require a separate authenticated backend with a persistent filesystem and exclusive signer ownership. This branch does not change that architecture or deploy the app.
+**Calibration:**
+1. Run `cd sdk && npm run dev -w examples/object-lab` and open http://127.0.0.1:3300.
+2. Photograph several objects from different sides, including two of the same kind, and download the descriptor set (no photos).
+3. Run `npm run calibrate -- <file>` in `sdk/` to get the CLS weight and threshold, with zero wrong-object accepts and the fewest same-object rejections.
 
-Downloaded model/runtime artifacts live in Git-ignored `public/tijori-assets/`. Keep these public files with the built app when hosting it. Preparation needs curl/network access on first run; subsequent builds reuse verified files. See `scripts/licenses/` and the license copies served beside the model/runtime. Do not place credentials or recovery files in `public/`.
+**Upgrading from 0.1.x:**
+- Object identities created with the old scanner (browser-only matching, a 0.50 threshold) are not accepted anymore. Their users see "Sign up again with a new scan", and their usernames can be registered again.
+- Passphrase identities are unchanged.
+- The vault moves from v6 to v7 (an additive migration), so 0.1.x servers cannot read state written by 0.2.0.
 
-## Isolated object profiles on Arkiv (v5)
+**Assets:** models load from the app's own origin after `tijori-client prepare-assets` (pinned, checksum-verified DINOv2, SlimSAM and ONNX Runtime WASM). Only the preparation step contacts Hugging Face. The camera is live-capture only; there is no gallery upload.
 
-New registrations now prompt you to tap the object in the photo. SlimSAM (`Xenova/slimsam-77-uniform`, pinned revision `5850ab45f587c112167512ffef949107115e26a0`, q8) generates a foreground mask on-device. The best predicted-IoU mask is applied, the background is made white and the bounding box is cropped before DINOv2 runs. Both signup and new-profile login use this pipeline. A failed/empty mask fails the scan; it never silently substitutes the original background. This is prompted segmentation, not VILA's text-based GroundingDINO detector or automatic object identification. Inspect framing and tap the same object each time. Keyboard activation chooses the image center. SlimSAM adds approximately 14 MB of model downloads, served from the laptop just like DINOv2. No photos or masks are uploaded.
-
-The stored `sam-q8-grid32` profile contains CLS plus 32 spatially pooled, normalized patch descriptors, quantized to signed 8-bit values and base64 encoded (~17 KB). This reduces a multi-megabyte reference to fit the existing 100,000-byte prototype cap. Matching therefore differs from full VILA patch matching; the existing 0.50 threshold remains experimental and uncalibrated. It is not a security or false-accept guarantee. The app fails if its total state cap is reached; it never prunes histories or renews expiration automatically.
-
-Aggregate **v4 → v5** is an explicit additive read migration: all existing identities, envelopes, Safe records, groups, transaction approvals, proximity history and operation IDs are preserved. New wallet records may carry a validated `objectProfile`. A subsequent authorized mutation persists v5 through the same signer lock, encrypted aggregate, durable journal, fee cap and receipt/readback verification. Reads do not spend gas. Legacy records do not receive invented templates or regenerated keys. Existing browser-only demo identities retain their previous path; they are not automatically uploaded, rekeyed or merged across local/Arkiv datasets.
-
-With `TIJORI_STORAGE_MODE=arkiv`, `/api/object-identities` retrieves enrolled profile references and encrypted envelopes from Arkiv-backed storage, so another browser/device can log in without importing a recovery file or relying on IndexedDB. Normal `/api/state` responses omit templates/envelopes. Local mode uses the same v5 representation but remains a separate database. IndexedDB is a cache/pending-signup safety record, not the source of truth for new Arkiv profiles. Existing browser-only identities may still need an optional backup. The signup request limit is 32 KB; other API actions retain their previous limits.
-
-**Object-only remains intentionally insecure.** A new EVM private key is random. Its wrapping password derives from the exact versioned compact profile bytes, not unstable floating-point image output, so retrieval reproduces the same wrapping key. However, the unauthenticated profile endpoint returns all material needed to unwrap it. Anyone with access to the local API, server data or a saved backup can bypass the photograph. This is not secure key custody or authentication. Passkeys were considered and explicitly declined for this demo. Do not use real funds. Safe signing remains in the connected wallet/Safe app. The server credentials and state encryption key are independent and must remain private.
-
-For the shared-venue Wi-Fi setup, automatic approval review rejected exposing Arkiv mode’s unauthenticated paid-write API. Keep the phone server in local mode. Live Arkiv testing is available on loopback only, for example `TIJORI_STORAGE_MODE=arkiv npm run start -- --hostname 127.0.0.1 --port 3185`. Authenticated access and write authorization must be added before enabling Arkiv on shared LAN/public hosting. See `docs/identity-v5-verification.md`.
-
-## Camera-only photo capture
-
-Signup and object login now use **Open camera → Take photo → tap the object** through an in-app live camera preview. There is no gallery or image-file picker. Camera permission and HTTPS (or laptop localhost) are required. Video-only capture prefers the rear camera, bounds photos to 1280 pixels and keeps the photo in device memory. Tracks stop after capture, closing the camera, hiding the tab or leaving the form. Late permission responses are stopped after cancellation. Optional JSON recovery import is separate and does not accept images. This camera-only UI is not liveness detection: screens or printed photographs can still be presented.

@@ -8,6 +8,8 @@ export const LEGACY_IDENTITY_AAD_PREFIX = 'tichori-identity-v1:';
 /** Object-recovery wrapping-password domain and recovery file kind. */
 export const LEGACY_OBJECT_WRAP_DOMAIN = 'tichori-insecure-object-demo-v1:';
 export const LEGACY_OBJECT_RECOVERY_KIND = 'tichori-insecure-object-demo';
+/** `object_name` of object identities from scanner v1 (0.1.x). They must enroll again with scanner v2. */
+export const LEGACY_DINO_OBJECT_NAME = 'dino-object-demo-v1';
 /** Browser storage: IndexedDB for remembered object identities, pending legacy Safe deployment, Web Lock name. */
 export const LEGACY_IDENTITY_DB = 'tichori-object-identities';
 export const LEGACY_PENDING_SAFE_KEY = 'tichori-pending-safe-v1';

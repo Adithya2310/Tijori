@@ -147,7 +147,8 @@ try {
  assert.ok(parallel.every(r=>r.status===200));
  // Versioned consumers use the same durable service and provider hooks as legacy routes.
  const capabilities=await request('v1/capabilities');
- assert.equal(capabilities.data.objectMatching.mode,'simulated');
+ // Scanner v2 identities are matched on the server; description identities keep the simulated check.
+ assert.deepEqual(capabilities.data.objectMatching,{provider:'dino-object-v2',mode:'live'});
  assert.equal(capabilities.data.externalVault.configured,false);
  assert.equal((await request('v1/state')).data.groups.length,0);
  const view=await request('v1/state?identityId='+creator);

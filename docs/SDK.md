@@ -7,7 +7,7 @@ Add Tijori's co-present treasury to your own DAO site, marketplace or community 
 - **Treasury tools.** Payout proposals, a vendor invoice inbox with signed webhooks, CSV export and a relayer gas tank.
 - **Acoustic proof of attendance.** A two-minute ultrasound or audible challenge, broadcast on one device and heard by the others.
 
-> **Prototype.** This is a hackathon-grade demo on testnets. The HTTP API is unauthenticated. The object check is bypassable and is not authentication. Acoustic matches can be replayed or relayed and do not prove physical proximity. Use test tokens only, never real funds or personal data, and do not expose the API publicly. The repository [README](../README.md) states the full threat model.
+> **Prototype.** This is a hackathon-grade demo on testnets. The HTTP API is unauthenticated. The object check runs on your server and tells different objects apart, but it is not authentication: identical objects match, and stored profiles can unlock keys. Acoustic matches can be replayed or relayed and do not prove physical proximity. Use test tokens only, never real funds or personal data, and do not expose the API publicly. The repository [README](../README.md) states the full threat model.
 
 ## Packages
 

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { formatEther, isAddress } from 'viem';
 import { withState, storageMode, StorageError } from '../storage/index.ts';
-import { publicState, VaultError, type Vault } from '@tijori/core/vault';
+import { isObjectIdentityV2, publicState, VaultError, type Vault } from '@tijori/core/vault';
 import { normalizeOwners, prepareSafe, SAFE_CHAIN_ID, verifySafeDeployment, readSafeStatus } from '../legacy-safe.ts';
 import { currentProviders } from '../context.ts';
 import '../providers.ts';
@@ -25,7 +25,8 @@ export function capabilities() {
 }
 function storageMetadata(vault: Vault) {return {storageMode:storageMode(),peers:vault.wallets.filter(w=>w.address&&w.keyEnvelope&&w.object_name).map(({id,name,address})=>({id,name,address}))};}
 export async function readObjectIdentities(): Promise<ObjectIdentitiesResponse> {
- return withState(async store=>{const {vault}=await store.read();return {identities:vault.wallets.flatMap(w=>w.objectProfile&&w.keyEnvelope?[{name:w.name,address:w.address,keyEnvelope:w.keyEnvelope,objectProfile:w.objectProfile}]:[]),storageMode:storageMode()};});
+ // Usernames only: profiles and key envelopes are released by a successful server-side match (login), never listed.
+ return withState(async store=>{const {vault}=await store.read();return {identities:vault.wallets.filter(isObjectIdentityV2).map(w=>({name:w.name,address:w.address})),storageMode:storageMode()};});
 }
 export async function readState(identityId?: string, versioned = false) {
  return withState(async store => {
@@ -75,6 +76,11 @@ export async function verifyExternalApproval(body: Record<string, unknown>) {
  if (!verification.accepted) throw new VaultError('External vault approval was not verified.');
  return { verification, transactionHash, vaultAddress, chainId, executed: false };
 }
+/** Released only after a successful login: the key envelope, plus the v2 profile that derives its wrapping password. */
+function loginSecrets(wallet: Vault['wallets'][number] | undefined) {
+ if (!wallet) return {};
+ return { keyEnvelope: wallet.keyEnvelope, ...(isObjectIdentityV2(wallet) ? { objectProfile: wallet.objectProfile } : {}) };
+}
 export async function mutate(action: string, body: Record<string, unknown>, operationId?: string | null, versioned = false) {
  if(storageMode()==='local'&&action==='register-safe')throw new VaultError('Safe deployment registration is disabled in local acoustic testing mode.');
  const id = operationId || randomUUID();
@@ -96,6 +102,6 @@ export async function mutate(action: string, body: Record<string, unknown>, oper
    await store.write(vault, previous);
   }
   const state = versioned ? applicationState(vault, actionIdentity(action, body, identityId)) : publicState(vault);
-  return { ...state, ...storageMetadata(vault), ...(identityId ? { identityId } : {}), ...(action === 'login' && identityId ? { keyEnvelope: vault.wallets.find(w => w.id === identityId)?.keyEnvelope } : {}) };
+  return { ...state, ...storageMetadata(vault), ...(identityId ? { identityId } : {}), ...(action === 'login' && identityId ? loginSecrets(vault.wallets.find(w => w.id === identityId)) : {}) };
  });
 }

@@ -7,10 +7,9 @@ import { sessionSigner, setSessionSigner } from '@tijori/client';
 import { explorerAddress, explorerTx, formatUsdt } from '@tijori/core/whitechain/chain';
 import { inboxKeyMessage, safeTxTypedData } from '@tijori/core/whitechain/safe-tx';
 import ObjectCapture from './ObjectCapture.tsx';
-import { useTijori, type PresenceEmit, type PresenceListener } from '../context.tsx';
-import { DINO_OBJECT_NAME, unlockObjectIdentityAccount, verifyObjectRecovery, type ObjectRecovery } from '@tijori/client';
-import { listDeviceIdentities, listServerIdentities } from '@tijori/client';
-import type { DinoFeatures } from '@tijori/core/dino';
+import { useTijori, type IdentityKind, type PresenceEmit, type PresenceListener } from '../context.tsx';
+import { listObjectUsernames, unlockObjectIdentityV2, type ObjectScanResult } from '@tijori/client';
+import { OBJECT_IDENTITY_NAME, packObjectQuery } from '@tijori/core/object-profile';
 
 type Group = ApplicationState['groups'][number];
 type Identity = { id: string; name: string; address: string | null };
@@ -25,17 +24,17 @@ const secondsLeft = (iso: string, now: number) => Math.max(0, Math.round((Date.p
  * the approver's own signature), the vendor invoice inbox, signers and the relayer gas tank.
  */
 export function VaultTreasury({ vaultId }: { vaultId: string }) {
- const { client, data, identity, setData, setNotice, setError, receiptUrl, presence, onPresenceEmit } = useTijori();
+ const { client, data, identity, setData, setNotice, setError, receiptUrl, presence, onPresenceEmit, identityKind } = useTijori();
  const vault = data.groups.find(g => g.id === vaultId);
  if (!vault?.safe || vault.safe.chainId !== 1874 || !identity) return null;
- return <TreasuryPanel key={vault.id} tijori={client} vault={vault} data={data} me={identity} onState={setData} notify={setNotice} fail={setError} receiptUrl={receiptUrl} presence={presence} onPresenceEmit={onPresenceEmit} />;
+ return <TreasuryPanel key={vault.id} tijori={client} vault={vault} data={data} me={identity} onState={setData} notify={setNotice} fail={setError} receiptUrl={receiptUrl} presence={presence} onPresenceEmit={onPresenceEmit} identityKind={identityKind} />;
 }
 
-function TreasuryPanel({ tijori, vault, data, me, onState, notify, fail, receiptUrl, presence, onPresenceEmit }: { tijori: TijoriClient; vault: Group; data: ApplicationState; me: Identity; onState: (s: ApplicationState) => void; notify: (m: string) => void; fail: (m: string) => void; receiptUrl: (id: string) => string; presence?: PresenceListener; onPresenceEmit?: (emit: PresenceEmit) => void }) {
+function TreasuryPanel({ tijori, vault, data, me, onState, notify, fail, receiptUrl, presence, onPresenceEmit, identityKind }: { identityKind: IdentityKind | null; tijori: TijoriClient; vault: Group; data: ApplicationState; me: Identity; onState: (s: ApplicationState) => void; notify: (m: string) => void; fail: (m: string) => void; receiptUrl: (id: string) => string; presence?: PresenceListener; onPresenceEmit?: (emit: PresenceEmit) => void }) {
  const [status, setStatus] = useState<SafeStatus | null>(null), [gas, setGas] = useState<RelayerStatus | null>(null), [sessions, setSessions] = useState<ApprovalSession[]>([]);
  const [modal, setModal] = useState<'propose' | 'approve' | 'inbox' | null>(null), [active, setActive] = useState<ApprovalSession | null>(null), [emitting, setEmitting] = useState<Presence | null>(null);
  const [to, setTo] = useState(''), [amount, setAmount] = useState(''), [note, setNote] = useState(''), [objectName, setObjectName] = useState(''), [passphrase, setPassphrase] = useState('');
- const [busy, setBusy] = useState(false), [error, setError] = useState(''), [recovery, setRecovery] = useState<ObjectRecovery | null | undefined>(undefined), [features, setFeatures] = useState<DinoFeatures | null>(null), [inbox, setInbox] = useState<{ inboxKey: string; webhookSecret: string; endpoint: string } | null>(null), [now, setNow] = useState(0);
+ const [busy, setBusy] = useState(false), [error, setError] = useState(''), [objectIdentity, setObjectIdentity] = useState<boolean | undefined>(identityKind ? identityKind === 'object' : undefined), [photo, setPhoto] = useState<ObjectScanResult | null>(null), [inbox, setInbox] = useState<{ inboxKey: string; webhookSecret: string; endpoint: string } | null>(null), [now, setNow] = useState(0);
  const refresh = useCallback(async () => {
   try { setStatus(await tijori.balance(vault.id)); } catch { /* shown as unavailable */ }
   try { setGas(await tijori.relayer()); } catch { /* optional */ }
@@ -45,15 +44,12 @@ function TreasuryPanel({ tijori, vault, data, me, onState, notify, fail, receipt
  }, [tijori, me.id, vault.id]);
  useEffect(() => { const first = setTimeout(() => { setNow(Date.now()); void refresh(); void poll(); }, 0); const id = setInterval(() => { setNow(Date.now()); void poll(); }, 3000); return () => { clearTimeout(first); clearInterval(id); }; }, [refresh, poll]);
  useEffect(() => {
-  if (modal !== 'approve' && modal !== 'inbox') return;
+  if ((modal !== 'approve' && modal !== 'inbox') || objectIdentity !== undefined) return;
   let live = true;
-  // Object identities (camera + on-device DINOv2) are matched here; passphrase identities fall back to the form.
-  Promise.all([listServerIdentities(tijori).catch(() => []), listDeviceIdentities().catch(() => [])]).then(([server, local]) => {
-   const mine = [...server, ...local].find(item => item.recovery.address.toLowerCase() === me.address?.toLowerCase());
-   if (live) setRecovery(mine?.recovery ?? null);
-  });
+  // Scanner v2 identities prove themselves with a photo; older passphrase identities with their description.
+  listObjectUsernames(tijori).then(list => { if (live) setObjectIdentity(list.some(item => item.address === me.address)); }, () => { if (live) setObjectIdentity(false); });
   return () => { live = false; };
- }, [tijori, modal, me.address]);
+ }, [tijori, modal, me.address, objectIdentity]);
  const proposals = data.proposals.filter(p => p.group_id === vault.id), invoices = data.invoices.filter(i => i.group_id === vault.id);
  const live = sessions.find(s => s.status === 'open' || s.status === 'executing' || s.status === 'submitted');
  const run = async (work: () => Promise<void>) => { setBusy(true); setError(''); try { await work(); } catch (e) { setError(e instanceof Error ? e.message : 'Something went wrong.'); } finally { setBusy(false); } };
@@ -82,15 +78,22 @@ function TreasuryPanel({ tijori, vault, data, me, onState, notify, fail, receipt
   if ('simulatedCode' in session.presence && session.presence.simulatedCode) return session.presence.simulatedCode;
   throw new Error('No room code heard yet. Stay near the person who started the session.');
  }
- /** Verify the person (object on this device, or passphrase identity) and return their in-memory signer. */
+ /** Verify the person (a fresh object photo, or a passphrase identity) and return their in-memory signer. */
  async function verifyMe() {
   if (!me.address) throw new Error('This identity has no address.');
-  if (recovery) {
-   if (!features) throw new Error('Show your object to the camera first.');
-   await verifyObjectRecovery(recovery, features); // throws when the object does not match
-   const signer = sessionSigner(me.address) ?? await unlockObjectIdentityAccount(recovery, recovery.keyEnvelope);
-   setSessionSigner(signer); setFeatures(null);
-   return { signer, objectName: DINO_OBJECT_NAME };
+  if (objectIdentity) {
+   if (!photo) throw new Error('Show your object to the camera first.');
+   const objectQuery = packObjectQuery(photo.descriptor);
+   let signer = sessionSigner(me.address);
+   if (!signer) {
+    // After a reload the signer is gone: the server matches the photo again and releases the key material.
+    const login = await tijori.objectLogin(me.name, objectQuery, crypto.randomUUID());
+    if (!login.objectProfile) throw new Error('The server did not return your identity.');
+    signer = await unlockObjectIdentityV2(me.address, login.keyEnvelope as KeyEnvelope, login.objectProfile);
+    setSessionSigner(signer);
+   }
+   setPhoto(null);
+   return { signer, objectName: OBJECT_IDENTITY_NAME, objectQuery };
   }
   if (!objectName.trim()) throw new Error('Show your personal object (enter its description for this older identity).');
   let signer = sessionSigner(me.address);
@@ -100,15 +103,15 @@ function TreasuryPanel({ tijori, vault, data, me, onState, notify, fail, receipt
    signer = await unlockIdentityAccount(me.address, login.keyEnvelope as KeyEnvelope, passphrase);
    setSessionSigner(signer); setPassphrase('');
   }
-  return { signer, objectName: objectName.trim() };
+  return { signer, objectName: objectName.trim(), objectQuery: undefined };
  }
  async function approve(session: ApprovalSession) {
   await run(async () => {
-   const { signer, objectName: objectMarker } = await verifyMe();
+   const { signer, objectName: objectMarker, objectQuery } = await verifyMe();
    const t = session.safeTx;
    const signature = await signer.signTypedData(safeTxTypedData(session.chainId, session.safe, { ...t, value: BigInt(t.value), safeTxGas: BigInt(t.safeTxGas), baseGas: BigInt(t.baseGas), gasPrice: BigInt(t.gasPrice), nonce: BigInt(t.nonce) }));
    const code = await heardCode(session);
-   const result = await tijori.approveInSession({ sessionId: session.id, walletId: me.id, objectName: objectMarker, signature, evidence: { reference: code, challengeId: session.presence.challengeId } });
+   const result = await tijori.approveInSession({ sessionId: session.id, walletId: me.id, objectName: objectMarker, ...(objectQuery ? { objectQuery } : {}), signature, evidence: { reference: code, challengeId: session.presence.challengeId } });
    onState(result); setSessions(list => list.map(s => (s.id === result.session.id ? result.session : s))); setActive(result.session); setObjectName('');
    if (result.session.status === 'executed') { setModal(null); setEmitting(null); notify(`Paid ${result.session.proposal?.amount} USDT on Whitechain. The vault covered the network fee.`); void refresh(); }
    else if (result.session.status === 'failed') setError(result.session.error || 'The payout failed on-chain.');
@@ -124,8 +127,8 @@ function TreasuryPanel({ tijori, vault, data, me, onState, notify, fail, receipt
  const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); notify('Copied.'); } catch { fail('Could not copy.'); } };
  const ownerName = (address: string) => data.wallets.find(w => w.address === address.toLowerCase())?.name ?? short(address);
 
- const identityCheck = () => recovery === undefined ? <p className="tj-form-hint">Loading your identity…</p>
-  : recovery ? <><p className="tj-form-hint">Show the object you registered with. It is matched on this device.</p><ObjectCapture isolate={!!recovery.objectProfile} autoProcess disabled={busy} onFeatures={setFeatures} /></>
+ const identityCheck = () => objectIdentity === undefined ? <p className="tj-form-hint">Loading your identity…</p>
+  : objectIdentity ? <><p className="tj-form-hint">Show the object you registered with. The server compares it with your registered object.</p><ObjectCapture mode="photo" disabled={busy} onResult={results => setPhoto(results?.[0] ?? null)} /></>
   : <><label>Show your personal object<input value={objectName} onChange={e => setObjectName(e.target.value)} placeholder="Your registered object description" /></label>
    {!sessionSigner(me.address) && <label>Key passphrase<input type="password" value={passphrase} onChange={e => setPassphrase(e.target.value)} autoComplete="current-password" /></label>}</>;
  return <>
@@ -161,13 +164,13 @@ function TreasuryPanel({ tijori, vault, data, me, onState, notify, fail, receipt
     <div className="tj-details"><div><span>Session</span><strong>{active.approvals.length} of {active.threshold} approved · {secondsLeft(active.expiresAt, now)}s left</strong></div><div><span>Presence</span><strong>{active.presence.mode === 'simulated' ? 'Room code received (simulated ultrasound)' : 'Listening for the room code…'}</strong></div></div>
     {active.approvedByMe ? <p className="tj-form-hint"><CheckCircle2 size={14} /> You approved. Waiting for the others in the room.</p> : <>
      {identityCheck()}
-     <div className="tj-mock-box"><ScanLine size={20} /><div><strong>{recovery ? 'Your object is matched on this device' : 'Older passphrase identity'}</strong><small>Your key then signs this exact payment in the browser. The server never sees it. The room code is simulated in this build.</small></div></div>
-     <button className="tj-submit" disabled={busy || active.status !== 'open' || recovery === undefined || (!!recovery && !features)} onClick={() => void approve(active)}>Approve together <Check size={17} /></button></>}</>}
+     <div className="tj-mock-box"><ScanLine size={20} /><div><strong>{objectIdentity ? 'Your object is checked by the server' : 'Older passphrase identity'}</strong><small>Your key then signs this exact payment in the browser. The server never sees the key. The room code is simulated in this build.</small></div></div>
+     <button className="tj-submit" disabled={busy || active.status !== 'open' || objectIdentity === undefined || (!!objectIdentity && !photo)} onClick={() => void approve(active)}>Approve together <Check size={17} /></button></>}</>}
    {modal === 'inbox' && <><div className="tj-modal-icon"><FileText /></div><div className="tj-section-kicker">LET VENDORS BILL THIS VAULT</div><h2>Invoice inbox key</h2><p className="tj-modal-desc">Vendors use this key with the @tijori/invoices SDK. Paid invoices notify them by signed webhook with the Whitechain receipt.</p>
     {inbox ? <div className="tj-details"><div><span>Inbox key</span><strong className="tj-mono">{inbox.inboxKey}</strong></div><div><span>Webhook secret</span><strong className="tj-mono">{inbox.webhookSecret}</strong></div><div><span>Endpoint</span><strong className="tj-mono">POST {inbox.endpoint}</strong></div><button className="tj-light-btn" onClick={() => void copy(`TIJORI_INBOX_KEY=${inbox.inboxKey}\nTIJORI_WEBHOOK_SECRET=${inbox.webhookSecret}`)}><Copy size={15} /> Copy as env</button></div>
      : <>{identityCheck()}
       <p className="tj-form-hint">Your identity key signs this request in the browser. The key and webhook secret are shown once here.</p>
-      <button className="tj-submit" disabled={busy || recovery === undefined || (!!recovery && !features)} onClick={() => void issueInbox()}>Show inbox key <Wallet size={17} /></button></>}</>}
+      <button className="tj-submit" disabled={busy || objectIdentity === undefined || (!!objectIdentity && !photo)} onClick={() => void issueInbox()}>Show inbox key <Wallet size={17} /></button></>}</>}
    {error && <div className="tj-error tj-modal-error">{error}</div>}
   </div></div>}
   {error && !modal && <div className="tj-error">{error}</div>}
