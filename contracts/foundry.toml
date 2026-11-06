@@ -13,5 +13,3 @@ fs_permissions = [{ access = "read", path = "./test/fixtures" }]
 [rpc_endpoints]
 whitechain_sepolia = "https://rpc.testnet.whitechain.io"
 
-[etherscan]
-whitechain_sepolia = { key = "blockscout", url = "https://explorer.testnet.whitechain.io/api/", chain = 1874 }
