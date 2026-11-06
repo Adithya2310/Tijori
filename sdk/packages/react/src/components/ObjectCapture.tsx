@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { extractObjectDescriptors, type ObjectBrush, type ObjectScanResult } from '@tijori/client';
+import { extractObjectDescriptors, preloadObjectModels, type ObjectBrush, type ObjectScanResult } from '@tijori/client';
 import CameraCapture from './CameraCapture.tsx';
 import BrushPad from './BrushPad.tsx';
 
@@ -14,6 +14,8 @@ export type ObjectCaptureProps = {
  disabled: boolean;
  /** Descriptors of the captured views, or null while capturing again / after an error. */
  onResult: (results: ObjectScanResult[] | null) => void;
+ /** Start loading the on-device models as soon as this renders, so the scan starts at once. Default true. */
+ preload?: boolean;
 };
 
 /**
@@ -21,12 +23,21 @@ export type ObjectCaptureProps = {
  * is found automatically; if the cut-out is wrong, the user brushes over the object and every photo is redone with
  * that brushing. Photos never leave the browser; only compact descriptors are returned.
  */
-export default function ObjectCapture({ mode, disabled, onResult }: ObjectCaptureProps) {
+export default function ObjectCapture({ mode, disabled, onResult, preload = true }: ObjectCaptureProps) {
  const controller = useRef<AbortController | null>(null);
  const [consent, setConsent] = useState(readConsent), [photos, setPhotos] = useState<Blob[]>([]), [cutouts, setCutouts] = useState<string[]>([]);
  const [brushing, setBrushing] = useState(false), [brushed, setBrushed] = useState(false);
  const [running, setRunning] = useState(false), [status, setStatus] = useState(''), [error, setError] = useState(''), [engineNote, setEngineNote] = useState('');
+ const [modelStatus, setModelStatus] = useState('');
  useEffect(() => () => cutouts.forEach(url => URL.revokeObjectURL(url)), [cutouts]);
+ // Download and start the models while the user types and frames the object (no photo is processed).
+ useEffect(() => {
+  if (!preload) return;
+  const stop = new AbortController();
+  void preloadObjectModels({ signal: stop.signal, onProgress: message => { if (!stop.signal.aborted) setModelStatus(message); } })
+   .then(() => { if (!stop.signal.aborted) setModelStatus(''); });
+  return () => stop.abort();
+ }, [preload]);
  useEffect(() => () => controller.current?.abort(), []);
  function reset() {
   controller.current?.abort(); controller.current = null;
@@ -68,7 +79,7 @@ export default function ObjectCapture({ mode, disabled, onResult }: ObjectCaptur
   {cutouts.length > 0 && !brushing && <div className="tj-scan-thumbs">{cutouts.map((url, i) => <img key={url} className="tj-scan-thumb" src={url} alt={mode === 'scan' ? `What was scanned, angle ${i + 1}` : 'What was scanned'}/>)}</div>}
   {canBrush && <button type="button" className="tj-light-btn" onClick={() => setBrushing(true)}>{error || !cutouts.length ? 'Brush over your object instead' : brushed ? 'Brush again' : 'Not your object? Brush over it'}</button>}
   {running && <button type="button" className="tj-light-btn" onClick={reset}>Cancel</button>}
-  <p role="status" aria-live="polite" className="tj-form-hint">{status}</p>
+  <p role="status" aria-live="polite" className="tj-form-hint">{status || (running ? '' : modelStatus)}</p>
   {engineNote && <p className="tj-form-hint">{engineNote}</p>}
   {error && <p role="alert" className="tj-error">{error}</p>}
  </fieldset>;

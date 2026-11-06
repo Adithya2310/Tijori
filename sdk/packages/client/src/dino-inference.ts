@@ -1,47 +1,19 @@
-import { pipeline, env, RawImage, type ImageFeatureExtractionPipeline } from '@huggingface/transformers';
-import { DINO_MODEL, DINO_REVISION, DINO_RUNTIME_VERSION, featuresFromTokens, type DinoFeatures } from '@tijori/core/dino';
-import { assetBaseUrl, modelsUrl, runtimeUrl } from './assets.ts';
+import { pipeline, RawImage, type ImageFeatureExtractionPipeline } from '@huggingface/transformers';
+import { DINO_MODEL, DINO_REVISION, featuresFromTokens, type DinoFeatures } from '@tijori/core/dino';
+import { loadListeners, prepareRuntime, reportDownload, type ObjectAccelerator, type RuntimeChoice } from './on-device-runtime.ts';
 import { CENTRE, poolForeground, type ObjectBrush, type ObjectPoint, type ObjectScanResult } from './object-geometry.ts';
 export { poolForeground, FOREGROUND_COVERAGE, type ObjectScanResult } from './object-geometry.ts';
+export { configureDinoRuntime, type ObjectAccelerator, type RuntimeChoice } from './on-device-runtime.ts';
 
 // On-device DINOv2 inference, shared by the worker and the in-page fallback. Never used on a server.
-let configuredFor: string | undefined;
-/**
- * Point transformers.js at the self-hosted assets. Called automatically before inference; the first base used wins
- * for the lifetime of the page or worker, because loaded models are cached.
- */
-export function configureDinoRuntime(base: string = assetBaseUrl()) {
- if (configuredFor) return;
- configuredFor = base;
- env.allowLocalModels = false;
- // The browser fetches the pinned files from the asset host, never from an inference service.
- env.remoteHost = modelsUrl(base);
- // Pipeline metadata discovery may omit revision; every request still uses this pin.
- env.remotePathTemplate = '{model}/{revision}/';
- const originalFetch = env.fetch!;
- env.fetch = (input, init) => originalFetch(typeof input === 'string' ? input.replace(`/${DINO_MODEL}/main/`, `/${DINO_MODEL}/${DINO_REVISION}/`) : input, init);
- const wasm = env.backends.onnx.wasm!;
- wasm.numThreads = 1;
- wasm.proxy = false;
- // The WASM folder follows the ONNX Runtime build that is actually loaded (pinned through @huggingface/transformers).
- const loaded = (env.backends.onnx as { versions?: { web?: string } }).versions?.web ?? DINO_RUNTIME_VERSION;
- const runtime = runtimeUrl(base, loaded);
- wasm.wasmPaths = { mjs: runtime + 'ort-wasm-simd-threaded.mjs', wasm: runtime + 'ort-wasm-simd-threaded.wasm' };
-}
-
+// DINOv2 runs 8-bit on the CPU everywhere (about 24 MB instead of 88 MB at full precision, with descriptors within
+// 0.01 of it), so every device computes the same descriptor for the same photo.
 let extractor: Promise<ImageFeatureExtractionPipeline> | undefined;
-const listeners = new Set<(message: string) => void>();
 
-/** Extract DINOv2 features in the current thread. Prefer extractObjectFeatures(), which uses a worker first. */
 async function loadExtractor(progress: (message: string) => void, cancelled: () => boolean) {
  progress('Loading DINOv2 on this device…');
- extractor ??= pipeline('image-feature-extraction', DINO_MODEL, {
-  device: 'wasm', dtype: 'fp32', revision: DINO_REVISION,
-  progress_callback: info => {
-   if (info.status === 'progress' && info.file.endsWith('.onnx')) for (const notify of listeners) notify(`Downloading model: ${(info.loaded / 1e6).toFixed(1)} / ${(info.total / 1e6).toFixed(1)} MB (${Math.round(info.progress)}%)`);
-   if (info.status === 'done' && info.file.endsWith('.onnx')) for (const notify of listeners) notify('Model downloaded. Starting the on-device runtime…');
-  },
- }).catch(error => { extractor = undefined; throw error; });
+ extractor ??= (pipeline('image-feature-extraction', DINO_MODEL, { device: 'wasm', dtype: 'q8', revision: DINO_REVISION, progress_callback: reportDownload }) as Promise<ImageFeatureExtractionPipeline>)
+  .catch(error => { extractor = undefined; throw error; });
  const model = await extractor;
  if (cancelled()) throw Error('Image processing cancelled.');
  const processor = model.processor.image_processor;
@@ -63,33 +35,49 @@ async function embed(model: ImageFeatureExtractionPipeline, blob: Blob, cancelle
   return { data: output.data as Float32Array, dims: output.dims as number[] };
  } finally { URL.revokeObjectURL(url); }
 }
+const requireWasm = () => { if (typeof WebAssembly === 'undefined') throw Error('WebAssembly is unavailable in this browser.'); };
+
+/**
+ * Download and start DINOv2 and SlimSAM (in parallel) without processing a photo, so the next scan starts at once.
+ * On WebGPU the image encoder also runs once on a blank image to compile its shaders. Returns the runtime used.
+ */
+export async function loadObjectModels(progress: (message: string) => void = () => {}, base?: string, accelerator?: ObjectAccelerator): Promise<RuntimeChoice> {
+ requireWasm();
+ const runtime = await prepareRuntime(base, accelerator);
+ loadListeners.add(progress);
+ try {
+  const { loadIsolationModels, warmUpIsolation } = await import('./object-isolation.ts');
+  await Promise.all([loadExtractor(progress, () => false), loadIsolationModels(runtime.device)]);
+  return { ...runtime, device: await warmUpIsolation() };
+ } finally { loadListeners.delete(progress); }
+}
 
 /** Extract DINOv2 features in the current thread (scanner v1). Prefer extractObjectFeatures(), which uses a worker. */
 export async function runDinoInference(imageBlob: Blob, progress: (message: string) => void, cancelled: () => boolean = () => false, point?: ObjectPoint, base?: string): Promise<DinoFeatures> {
- if (typeof WebAssembly === 'undefined') throw Error('WebAssembly is unavailable in this browser.');
- configureDinoRuntime(base);
- listeners.add(progress);
+ requireWasm();
+ await prepareRuntime(base, 'wasm');
+ loadListeners.add(progress);
  try {
   const model = await loadExtractor(progress, cancelled);
   if (point) { const { isolateObject } = await import('./object-isolation.ts'); imageBlob = await isolateObject(imageBlob, point, progress, cancelled); }
   progress('Extracting object features on this device…');
   const { data, dims } = await embed(model, imageBlob, cancelled);
   return featuresFromTokens(data, dims);
- } finally { listeners.delete(progress); }
+ } finally { loadListeners.delete(progress); }
 }
 
 /** Isolate the object at `point` (default: the centre) and compute its scanner v2 descriptor, in this thread. */
-export async function runObjectDescriptor(imageBlob: Blob, progress: (message: string) => void, cancelled: () => boolean = () => false, point: ObjectPoint = CENTRE, base?: string, brush?: ObjectBrush): Promise<ObjectScanResult> {
- if (typeof WebAssembly === 'undefined') throw Error('WebAssembly is unavailable in this browser.');
- configureDinoRuntime(base);
- listeners.add(progress);
+export async function runObjectDescriptor(imageBlob: Blob, progress: (message: string) => void, cancelled: () => boolean = () => false, point: ObjectPoint = CENTRE, base?: string, brush?: ObjectBrush, accelerator?: ObjectAccelerator): Promise<ObjectScanResult> {
+ requireWasm();
+ const runtime = await prepareRuntime(base, accelerator);
+ loadListeners.add(progress);
  try {
-  const model = await loadExtractor(progress, cancelled);
-  const { isolateObjectRegion } = await import('./object-isolation.ts');
+  const { isolateObjectRegion, loadIsolationModels } = await import('./object-isolation.ts');
+  const [model] = await Promise.all([loadExtractor(progress, cancelled), loadIsolationModels(runtime.device)]);
   const isolated = await isolateObjectRegion(imageBlob, point, progress, cancelled, brush);
   progress('Reading your object on this device…');
   const { data, dims } = await embed(model, isolated.blob, cancelled);
   const { cls, fg, foregroundPatches } = poolForeground(data, dims, isolated.grid);
   return { descriptor: { cls, fg }, objectFraction: isolated.objectFraction, foregroundPatches, preview: isolated.blob, grid: Array.from(isolated.grid, v => Math.round(v * 100) / 100) };
- } finally { listeners.delete(progress); }
+ } finally { loadListeners.delete(progress); }
 }

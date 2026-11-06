@@ -14,7 +14,7 @@ Add Tijori's co-present treasury to your own DAO site, marketplace or community 
 | Package | Runs in | What it gives you |
 |---|---|---|
 | `@tijori/server` | Node.js 22.12+ | `createTijoriServer(config)`, a fetch handler with Next.js and Node/Express adapters. It includes storage (Arkiv, local file, memory), the Whitechain relayer and verifier, and the `tijori-server` CLI. |
-| `@tijori/client` | Browser | `createTijoriClient()` for the `/v1` API, plus: <ul><li>on-device object features (`extractObjectFeatures`)</li><li>identity storage</li><li>the acoustic modem</li><li>the `tijori-client prepare-assets` CLI</li></ul> |
+| `@tijori/client` | Browser | `createTijoriClient()` for the `/v1` API, plus: <ul><li>on-device object scanning (`preloadObjectModels`, `extractObjectDescriptors`)</li><li>identity storage</li><li>the acoustic modem</li><li>the `tijori-client prepare-assets` CLI</li></ul> |
 | `@tijori/react` | React 19 | `<TijoriProvider>`, the drop-in `<TijoriApp/>`, composable components and hooks, and `styles.css`. |
 | `@tijori/core` | Anywhere | Shared types, vault rules, EIP-712 helpers and `/v1` wire types. Installed automatically. |
 | `@tijori/invoices` | Vendor's server | A zero-dependency SDK that lets vendors bill a vault and verify paid-invoice webhooks. |
@@ -29,7 +29,7 @@ All packages are ESM-only, ship TypeScript types, and are versioned together.
   - Every process that uses the same keys must share that directory.
 - **HTTPS.** Browsers only allow the camera and microphone on HTTPS (or `localhost`).
 - **Same origin.** Writes are accepted only from the page's own origin, so serve the UI and the API from the same site.
-- **Model assets.** About 100 MB of pinned model files, prepared once and served as static files (see below).
+- **Model assets.** About 92 MB of pinned model files, prepared once and served as static files (see below). A browser downloads 53–69 MB of them once, then reads its cache.
 
 ## 1. Install
 
@@ -39,6 +39,11 @@ npx tijori-client prepare-assets public/tijori-assets   # downloads and checksum
 ```
 
 Run `prepare-assets` in your build (for example `"prebuild"`). Serve `public/tijori-assets/` with long-lived cache headers. You can also host it on a CDN and pass that URL as `assetBaseUrl`.
+
+For fast scans:
+- **Cross-origin isolation.** Send `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless` on your pages, so the models can use several CPU threads (about 3× faster). Check that any third-party iframes and popups on those pages still work. Without these headers the models use one thread.
+- **Preloading.** `<ObjectCapture>` starts loading the models when it renders (`preload={false}` turns this off). Without React, call `preloadObjectModels()` when your sign-in form opens. The models stay loaded in one worker for the whole page.
+- **WebGPU (opt-in).** `configureAssets({ accelerator: 'webgpu' })` runs object isolation on the GPU when it supports 16-bit shaders (about 2× faster on a laptop), falling back to the CPU when it cannot. It is off by default because some browsers reject ONNX Runtime's WebGPU shaders.
 
 ## 2. Configure the backend
 
@@ -127,10 +132,11 @@ Any framework with Fetch API requests (Hono, Remix, Bun, Deno and others) can ca
 Use the headless client:
 
 ```ts
-import { createTijoriClient, configureAssets, extractObjectFeatures, loadAcousticModem } from '@tijori/client';
+import { createTijoriClient, configureAssets, extractObjectDescriptors, loadAcousticModem, preloadObjectModels } from '@tijori/client';
 configureAssets({ assetBaseUrl: '/tijori-assets/' });
 const client = createTijoriClient({ baseUrl: '/api/tijori/v1' });
-const features = await extractObjectFeatures(photoBlob, { onProgress: console.log });
+void preloadObjectModels(); // when the sign-in form opens
+const [scan] = await extractObjectDescriptors([photoBlob], { onProgress: console.log }); // scan.descriptor, scan.preview
 const modem = await loadAcousticModem(); // initModem / playChallengeTone / startAcousticListener
 ```
 
@@ -138,7 +144,7 @@ The object worker is created with `new Worker(new URL('./dino.worker.js', import
 - `optimizeDeps.exclude: ['@tijori/client', '@huggingface/transformers']`
 - `worker.format: 'es'`
 
-Alternatively, import the worker yourself and pass `extractObjectFeatures(blob, { workerFactory })`. If no worker can start, inference falls back to the page.
+Alternatively, import the worker yourself and pass the same `workerFactory` to `preloadObjectModels()` and `extractObjectDescriptors()`. If no worker can start, inference falls back to the page.
 
 ## Customising
 

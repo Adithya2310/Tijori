@@ -17,9 +17,16 @@
   - **Fixed preprocessing:** colours are no longer corrupted; crops are padded instead of stretched.
   - **The object is isolated inside an on-screen guide circle,** which leaves out the hand or face holding it.
   - **New option "Not your object? Brush over it"** lets the user paint over the object; the painting becomes SAM prompts.
-  - **The shipped threshold is 0.80.** On real photos, different objects score 0.12–0.33.
+  - **The shipped threshold is 0.55.** On real photos, different objects score 0.12–0.33, so this keeps a wide gap while accepting natural angle and lighting changes. Wrong objects are throttled at 8 per 2 minutes per identity.
   - **Descriptors are object-only:** the CLS token plus a mean over the object's own patches, about 1 KB per view.
   - **`/v1/object-identities` lists usernames only.**
+  - **Faster scanning:**
+    - The models preload when the sign-in form opens and stay loaded in one worker for the whole visit.
+    - DINOv2 runs at 8-bit precision (24 MB instead of 88 MB), and WebGPU for object isolation is available as an opt-in.
+    - The models use several CPU threads on cross-origin isolated pages.
+    - A first visit downloads about 53 MB instead of 117 MB, and one photo takes about 1.8 s instead of 5.5 s on a recent laptop.
+    - New: `preloadObjectModels()`, `configureAssets({ accelerator })`, and `ObjectCapture`'s `preload` prop.
+    - Re-run `tijori-client prepare-assets` after upgrading.
 
   Breaking:
 

@@ -1,9 +1,9 @@
 'use client';
 // Developer tool: collect labelled scanner v2 descriptors to calibrate the matching threshold.
 // Photos never leave the browser; only compact descriptors are kept (in this browser) and downloaded.
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { ObjectCapture } from '@tijori/react';
-import type { ObjectScanResult } from '@tijori/client';
+import { configureAssets, preloadObjectModels, type ObjectScanResult, type RuntimeChoice } from '@tijori/client';
 import { DINO_MODEL, DINO_REVISION } from '@tijori/core/dino';
 import { packObjectView, unpackObjectView } from '@tijori/core/object-profile';
 import { compareObjectViews, OBJECT_MATCH_CLS_WEIGHT, OBJECT_MATCH_THRESHOLD } from '@tijori/core/object-match';
@@ -12,6 +12,8 @@ import { compareObjectViews, OBJECT_MATCH_CLS_WEIGHT, OBJECT_MATCH_THRESHOLD } f
 type Sample = { label: string; category: string; view: string; at: string; objectFraction?: number; grid?: string };
 const silhouette = (grid?: number[]) => grid ? grid.map(v => Math.min(9, Math.floor(v * 10))).join('') : undefined;
 const STORE = 'tj-object-lab-v2';
+// Open the lab with ?gpu to try the opt-in WebGPU runtime and compare it with the CPU (descriptors should agree closely).
+if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('gpu')) configureAssets({ accelerator: 'webgpu' });
 // Samples live in localStorage (this browser only), read through an external store so server and client agree.
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
@@ -25,6 +27,9 @@ export default function ObjectLab() {
  const setSamples = (update: (list: Sample[]) => Sample[]) => { let current: Sample[] = []; try { current = JSON.parse(readRaw()); } catch { /* start fresh */ } writeSamples(update(current)); };
  const [label, setLabel] = useState(''), [category, setCategory] = useState('');
  const [current, setCurrent] = useState<ObjectScanResult | null>(null), [saved, setSaved] = useState('');
+ // Shares ObjectCapture's preload; shows which runtime this browser uses (descriptors are the same on every runtime).
+ const [runtime, setRuntime] = useState<RuntimeChoice | null | undefined>(undefined);
+ useEffect(() => { let live = true; void preloadObjectModels().then(choice => { if (live) setRuntime(choice); }); return () => { live = false; }; }, []);
  const latest = samples.at(-1);
  // Best score of the latest photo against each label's other photos: its own label should win clearly.
  const scores = useMemo(() => {
@@ -64,6 +69,7 @@ export default function ObjectLab() {
    <div className="tj-details">{Object.entries(counts).map(([name, n]) => <div key={name}><span>{name}</span><strong>{n} photo{n === 1 ? '' : 's'}</strong></div>)}<div><span>Total</span><strong>{samples.length} photos, {Object.keys(counts).length} objects</strong></div></div>
    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}><button className="tj-primary" disabled={!samples.length} onClick={download}>Download calibration set</button><button className="tj-light-btn" disabled={!samples.length} onClick={() => setSamples(list => list.slice(0, -1))}>Undo last photo</button><button className="tj-light-btn" disabled={!samples.length} onClick={() => { if (confirm('Delete all samples?')) setSamples(() => []); }}>Clear all</button></div>
    <p className="tj-form-hint">Current setting: match when the score is at least {OBJECT_MATCH_THRESHOLD} (CLS weight {OBJECT_MATCH_CLS_WEIGHT}). Green = the same object would log in; red = a different object would wrongly log in.</p>
+   <p className="tj-form-hint" data-runtime={runtime ? `${runtime.device}:${runtime.threads}` : ''}>On-device runtime: {runtime ? `${runtime.device === 'webgpu' ? 'WebGPU for object isolation' : 'CPU only'}, ${runtime.threads} CPU thread${runtime.threads === 1 ? '' : 's'}` : runtime === null ? 'unavailable (models load when you take a photo)' : 'loading…'}</p>
   </div>
  </main>;
 }

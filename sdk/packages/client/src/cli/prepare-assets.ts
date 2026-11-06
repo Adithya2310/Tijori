@@ -13,6 +13,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { DINO_MODEL, DINO_REVISION, DINO_RUNTIME_VERSION } from '@tijori/core/dino';
 
+// Keep in sync with on-device-runtime.ts (that module is browser-only).
 const SAM_MODEL = 'Xenova/slimsam-77-uniform', SAM_REVISION = '5850ab45f587c112167512ffef949107115e26a0';
 export type ModelFile = { name: string; size: number; model?: string; revision?: string; sha256?: string; gitBlob?: string };
 export const modelFiles: ModelFile[] = [
@@ -20,11 +21,15 @@ export const modelFiles: ModelFile[] = [
  { name: 'onnx/prompt_encoder_mask_decoder_quantized.onnx', size: 4_903_810, model: SAM_MODEL, revision: SAM_REVISION, sha256: 'cb90b279f549d2cab7fd6e20c38522438c65d84bdcca3d2a764cff7d857fdce2' },
  { name: 'onnx/vision_encoder_quantized.onnx', size: 8_882_165, model: SAM_MODEL, revision: SAM_REVISION, sha256: 'cce23c7b2e5d4f330932738fb67ba518e04b0d99ccdd1cccd22a7da4e01f2971' },
  { name: 'preprocessor_config.json', size: 466, model: SAM_MODEL, revision: SAM_REVISION, gitBlob: '732fbaf0c512b97d8d9161f51bc157bfb2873d12' },
+ // SlimSAM's image encoder at 16-bit precision, used instead of the 8-bit one on devices with WebGPU.
+ { name: 'onnx/vision_encoder_fp16.onnx', size: 12_170_657, model: SAM_MODEL, revision: SAM_REVISION, sha256: '11aaeb49c75e7b3f4cbf8a32c2c819406520c6b3affb4068ff474b2240c8aa38' },
  { name: 'config.json', size: 899, gitBlob: 'a1c56096127d92e96cfcdab9e7b9b1935686b3ec' },
  { name: 'preprocessor_config.json', size: 436, gitBlob: 'ff5b47c2edcd1d3556d63c01a65d93b58b9efce1' },
- { name: 'onnx/model.onnx', size: 88_459_888, sha256: '83141175ec78b4ff9a2bb58a4c7c264ba0054d1c2e122e5a8114b79a8d4179ea' },
+ // DINOv2 at 8-bit precision (descriptors within 0.01 of the 88 MB full-precision model).
+ { name: 'onnx/model_quantized.onnx', size: 24_451_943, sha256: '3afdc8bc63b50558d6e5770f5b799bb82455c2311183a2de43803f343a29d917' },
 ];
-const RUNTIME_FILES = ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm'];
+// The plain build runs on the CPU; the asyncify build adds WebGPU and is only downloaded by browsers that use it.
+const RUNTIME_FILES = ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm', 'ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm'];
 
 export async function validModelFile(path: string, expected: Pick<ModelFile, 'size' | 'sha256' | 'gitBlob'>) {
  try {
@@ -96,7 +101,7 @@ export async function prepareAssets(directory = join(process.cwd(), 'public', 't
  await copyFile(join(licenses, 'onnxruntime.txt'), join(runtimeDirectory, 'LICENSE.txt'));
  await copyFile(join(licenses, 'dinov2.txt'), join(assets, 'models', DINO_MODEL, DINO_REVISION, 'LICENSE.txt'));
  await copyFile(join(licenses, 'dinov2.txt'), join(assets, 'models', SAM_MODEL, SAM_REVISION, 'LICENSE.txt'));
- const manifest = { version: 1, models: [{ id: DINO_MODEL, revision: DINO_REVISION }, { id: SAM_MODEL, revision: SAM_REVISION }], runtime: { package: 'onnxruntime-web', version: runtimeVersion, files: RUNTIME_FILES } };
+ const manifest = { version: 2, models: [{ id: DINO_MODEL, revision: DINO_REVISION, files: modelFiles.filter(file => !file.model).map(file => file.name) }, { id: SAM_MODEL, revision: SAM_REVISION, files: modelFiles.filter(file => file.model === SAM_MODEL).map(file => file.name) }], runtime: { package: 'onnxruntime-web', version: runtimeVersion, files: RUNTIME_FILES } };
  await writeFile(join(assets, 'tijori-assets.json'), JSON.stringify(manifest, null, 1) + '\n');
  log(`DINOv2, SlimSAM and the WASM runtime are ready in ${assets}. Serve this directory as static files.`);
  return manifest;

@@ -268,5 +268,11 @@ Use synthetic names and test funds only.
 - Passphrase identities are unchanged.
 - The vault moves from v6 to v7 (an additive migration), so 0.1.x servers cannot read state written by 0.2.0.
 
-**Assets:** models load from the app's own origin after `tijori-client prepare-assets` (pinned, checksum-verified DINOv2, SlimSAM and ONNX Runtime WASM). Only the preparation step contacts Hugging Face. The camera is live-capture only; there is no gallery upload.
+**Assets and speed:**
+- Models load from the app's own origin after `tijori-client prepare-assets` (pinned, checksum-verified DINOv2, SlimSAM and ONNX Runtime WASM). Only the preparation step contacts Hugging Face.
+- The scanner starts loading as soon as the sign-in form opens and stays loaded in one worker for the whole visit, so retakes, brushing and logins never reload it.
+- DINOv2 and SlimSAM run on the CPU at 8-bit precision (DINOv2 is 24 MB instead of 88 MB; descriptors stay within 0.01 of full precision), so every device computes the same descriptor. WebGPU for SlimSAM's image encoder is opt-in (`configureAssets({ accelerator: 'webgpu' })`), because some browsers reject ONNX Runtime's WebGPU shaders.
+- The app sends `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless`, so the CPU parts use up to 4 threads. Safari ignores `credentialless` and uses one thread.
+- A first visit downloads about 53 MB, down from 117 MB; later visits read the browser cache. On a recent laptop one photo takes about 1.8 s, down from about 5.5 s (about 0.8 s with the opt-in WebGPU).
+- The camera is live-capture only; there is no gallery upload.
 

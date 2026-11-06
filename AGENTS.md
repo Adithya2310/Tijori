@@ -56,6 +56,12 @@ New object sign-ups use scanner v2.
 - **Scanner v1 identities** (0.1.x, browser-only matching) are told to sign up again. Their usernames may be re-registered.
 - **Unchanged:** passphrase identities keep their original login path. Photos and masks never leave the device. Never store plaintext keys, passphrases or photos.
 - **Thresholds:** `OBJECT_MATCH_CLS_WEIGHT` and `OBJECT_MATCH_THRESHOLD` come from the object-lab calibration (`sdk/examples/object-lab`, `npm run calibrate` in `sdk/`). Re-calibrate before changing the pipeline.
+- **Speed:**
+  - DINOv2 runs 8-bit on the CPU on every device, so descriptors are the same everywhere.
+  - SlimSAM runs 8-bit on the CPU by default. WebGPU (16-bit image encoder) is opt-in through `configureAssets({ accelerator: 'webgpu' })`, because some browsers reject ONNX Runtime's WebGPU shaders; it falls back to the CPU.
+  - One long-lived worker keeps the models loaded, and `ObjectCapture` preloads them.
+  - The app is cross-origin isolated (COOP `same-origin`, COEP `credentialless`) so WASM can use several threads.
+  - Re-check scores across runtimes in the object lab (`?gpu` tries WebGPU) after changing model precision.
 
 Legacy v1/v2 identifiers without a valid EVM address remain legacy records with their relationships intact; they do not gain fabricated addresses or encrypted keys. They cannot log in through the new signup/login flow and have no automatic reassignment. A group has a unique mock signal code and at least two members. Codes and object descriptions are omitted from state responses. New Safe addresses, signers and deployment transactions are public on Base Sepolia. Wallet/namespace/revision/size/timing metadata remains public. The state entity expires 30 days after creation; patches do not renew it. Renewal requires separately authorized Lifetime Extension. The sender's approval is recorded when creating a legacy simulated transaction; a strict majority completes it. Object matching uses DINOv2 but remains an insecure browser check; acoustic matching uses real browser audio. Matches never change Safe thresholds or demo transaction approvals. Use different enrolled identities on separate devices; invite generated identity addresses for acoustic groups. Safe signer addresses and generated identity addresses are separate; checks use stored group membership, not live on-chain signer authorization. Legacy balances are placeholders. Safe vault balances and signer configuration are read from Base Sepolia; Safe transactions are managed in the Safe app.
 

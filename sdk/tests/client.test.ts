@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DINO_DIMENSIONS, DINO_PATCHES, featuresFromTokens } from '@tijori/core/dino';
 import { configureAssets, assetBaseUrl, resolveAssetBase, modelsUrl, runtimeUrl, DEFAULT_ASSET_BASE_URL } from '@tijori/client/assets';
-import { extractObjectFeatures } from '@tijori/client/object-features';
+import { extractObjectDescriptors, extractObjectFeatures, preloadObjectModels } from '@tijori/client/object-features';
 import { createTijoriClient, createTichoriClient, TijoriError } from '@tijori/client/api';
 
 const features = featuresFromTokens(Float32Array.from({ length: (DINO_PATCHES + 1) * DINO_DIMENSIONS }, (_, i) => (i % 7) + 1), [1, DINO_PATCHES + 1, DINO_DIMENSIONS]);
@@ -64,6 +64,57 @@ test('worker failures fall back to the page once; aborts and stalls reject and s
 
  const aborted = new AbortController(); aborted.abort();
  await assert.rejects(extractObjectFeatures(new Blob(['photo']), { workerFactory: () => { throw new Error('must not start'); }, signal: aborted.signal }), (error: Error) => error.name === 'AbortError');
+});
+
+test('scanner v2 keeps one warm worker per page: preload, queued scans, cancellation and clear errors', async () => {
+ const unit = Array(384).fill(1 / Math.sqrt(384));
+ const scan = { descriptor: { cls: unit, fg: unit }, objectFraction: 0.2, foregroundPatches: 40 };
+ type Job = { id: number; mode: string; image?: Blob; assetBaseUrl?: string };
+ const { created, factory } = fakeWorker((worker, raw) => {
+  const job = raw as Job;
+  if (job.mode === 'cancel') return;
+  if (job.mode === 'preload') {
+   worker.send({ id: job.id, status: 'progress', message: 'Loading models on this device: 1.0 / 2.0 MB (50%)' });
+   worker.send({ id: job.id, status: 'complete', runtime: { device: 'wasm', threads: 4 } });
+   return;
+  }
+  void job.image!.text().then(text => {
+   if (text === 'hold') return;
+   if (text === 'none') worker.send({ id: job.id, status: 'error', message: 'No object found inside the circle.' });
+   else if (text === 'crash') worker.send({ id: job.id, status: 'error', message: 'out of memory' });
+   else { worker.send({ id: job.id, status: 'progress', message: `Reading ${text}` }); worker.send({ id: job.id, status: 'complete', result: scan }); }
+  });
+ });
+ const loading: string[] = [];
+ assert.deepEqual(await preloadObjectModels({ workerFactory: factory, assetBaseUrl: 'https://cdn.example/m', onProgress: m => loading.push(m) }), { device: 'wasm', threads: 4 });
+ assert.deepEqual(loading, ['Loading models on this device: 1.0 / 2.0 MB (50%)']);
+ assert.equal((created[0].jobs[0] as Job).assetBaseUrl, 'https://cdn.example/m/');
+ assert.deepEqual(await preloadObjectModels({ workerFactory: factory }), { device: 'wasm', threads: 4 }, 'one preload per page');
+
+ const progress: string[] = [], indexes: number[] = [];
+ const results = await extractObjectDescriptors([new Blob(['a']), new Blob(['b'])], { workerFactory: factory, onProgress: m => progress.push(m), onResult: i => indexes.push(i) });
+ assert.equal(results.length, 2); assert.deepEqual(indexes, [0, 1]); assert.deepEqual(progress, ['Reading a', 'Reading b']);
+ assert.equal(created.length, 1, 'the preloaded worker is reused'); assert.equal(created[0].terminated, false);
+ const ids = (created[0].jobs as Job[]).map(job => job.id);
+ assert.equal(new Set(ids).size, ids.length, 'every job has its own id');
+
+ await assert.rejects(extractObjectDescriptors([new Blob(['none'])], { workerFactory: factory, onFallback: () => assert.fail('no fallback for a missing object') }), /No object found/);
+ const controller = new AbortController();
+ const held = extractObjectDescriptors([new Blob(['hold'])], { workerFactory: factory, signal: controller.signal });
+ await new Promise(resolve => setTimeout(resolve, 5));
+ controller.abort();
+ await assert.rejects(held, (error: Error) => error.name === 'AbortError');
+ const cancel = (created[0].jobs as Job[]).at(-1)!;
+ assert.equal(cancel.mode, 'cancel'); assert.equal(cancel.id, (created[0].jobs as Job[]).at(-2)!.id);
+ assert.equal(created[0].terminated, false, 'cancelling keeps the models loaded');
+ assert.equal((await extractObjectDescriptors([new Blob(['c'])], { workerFactory: factory })).length, 1);
+
+ // Any other worker failure: this call moves to the page, and the next call starts a fresh worker.
+ const fallback = new AbortController(), reasons: string[] = [];
+ await assert.rejects(extractObjectDescriptors([new Blob(['crash'])], { workerFactory: factory, signal: fallback.signal, onFallback: reason => { reasons.push(reason); fallback.abort(); } }), (error: Error) => error.name === 'AbortError');
+ assert.deepEqual(reasons, ['out of memory']); assert.equal(created[0].terminated, true);
+ assert.equal((await extractObjectDescriptors([new Blob(['d'])], { workerFactory: factory })).length, 1);
+ assert.equal(created.length, 2);
 });
 
 test('API client: v1 paths, percent-encoded queries, keepalive cancels and typed errors', async () => {
