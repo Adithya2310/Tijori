@@ -2,7 +2,7 @@
 
 Anon RPC defines a sandboxed worker interface, not an anonymity network by itself. The optional Safe balance check uses the published Nym worker through `@anon-rpc/browser-harness`. The browser directly reads the worker specifier on Ethereum mainnet and resolves the worker bundle, verifies its hash, then starts it in a sandbox. The selected published worker is intended to route the Base Sepolia `eth_getBalance` request through Nym; this has not been independently verified by observing exit traffic. The RPC endpoint receives the Safe address. A successful response alone does not establish what source IP the endpoint observed. The entry network can see the user's IP; anonymity depends on the worker, network and threat model. Hash verification establishes the bundle matches the specifier, not that it is trustworthy. The bootstrap RPC and bundle host may see the browser IP. Availability and performance depend on external services.
 
-Open a registered Safe and select **Check balance via Anon RPC**. It can take time to initialize; failure does not fall back to a direct request. The existing balance and signer display still uses the server's normal RPC. This optional check requires a browser with the necessary WebRTC/network access and uses public endpoints without an SLA. It is a prototype, not an independently verified privacy guarantee.
+Open a registered Safe and select **Check balance via Anon RPC**. Whitechain vaults can check WBT and the configured USDT or rehearsal token; legacy Base Sepolia vaults can check ETH. It can take time to initialize; failure does not fall back to a direct request. The existing treasury balance and signer display still uses the server's normal RPC, which receives the vault address independently of this optional check. This optional check requires a browser with the necessary WebRTC/network access and uses public endpoints without an SLA. It is a prototype, not an independently verified privacy guarantee.
 
 ## Scope and limitations
 
@@ -17,9 +17,9 @@ References: https://ethereum.github.io/anon-rpc/wallets/ and https://ethereum.gi
 
 ## Isolated connectivity diagnostic
 
-Open `/diagnostics/anon-rpc` (also linked from sign-in and the dashboard). No identity, Arkiv configuration, wallet, or funds are needed. Whitechain is **not integrated**: the target is only a read-only connectivity fixture, separate from Safe deployment, balances, identity, API providers, and storage.
+Open `/diagnostics/anon-rpc` (also linked from sign-in and the dashboard). No identity, Arkiv configuration, wallet, or funds are needed. The diagnostic is a read-only connectivity fixture, separate from the Whitechain treasury and the optional Whitechain balance check.
 
-The intended path is application → `@anon-rpc/browser-harness` → published Nym worker/mixnet → Whitechain testnet RPC → application. There is no passthrough worker or direct target fallback. Only `eth_chainId` and latest `eth_getBalance` are accepted by the reusable transport boundary.
+The intended path is application → `@anon-rpc/browser-harness` → published Nym worker/mixnet → Whitechain testnet RPC → application. There is no passthrough worker or direct target fallback. The local transport accepts `eth_chainId`, latest `eth_getBalance`, and a narrowly validated latest ERC-20 `balanceOf` call. The balance check verifies the chain ID, obtains the configured token from the application's capabilities endpoint, and validates RPC response shapes. It uses the public Whitechain testnet endpoint even when the server is configured with another endpoint.
 
 ### Endpoint verification (2026-11-06)
 
@@ -37,7 +37,7 @@ The intended path is application → `@anon-rpc/browser-harness` → published N
 
 The extra owning frame is intentional: inspection of browser-harness 0.4.0 showed that `close()` does not prevent an outstanding specifier/bundle bootstrap from later creating its inner iframe. Destroying the entire owning browsing context also disposes late bootstrap work and nested workers. Messages are checked against the expected frame/parent, same origin, and a per-run MessageChannel; the worker retains the harness's null-origin sandbox. The same-origin outer host is lifecycle containment, not an additional security sandbox.
 
-`@tijori/client/anon-rpc` (`sdk/packages/client/src/anon-rpc.ts`) exposes `requestViaNym` for later chain integration; pass `hostUrl` when the host page is not at `/diagnostics/anon-rpc/host`. `@tijori/client/anon-rpc-protocol` owns read validation and the diagnostic-only testnet constant. The host page calls `startAnonRpcHost()` (`sdk/packages/client/src/anon-rpc-host.ts`), which owns the actual harness and explicit direct Ethereum bootstrap (15-second request limit). It does not call Tijori's paid-write API. No credentials, identity keys, or object data are sent. Nym/gateway availability, WebRTC policies, CSP, bundle resolvers, and Ethereum bootstrap may block the flow; errors never enable a direct destination request.
+The Whitechain balance component and host use the checked-in SDK transport source, including its extended read validation; the published package's existing balance and diagnostic callers remain compatible with that host. The host owns the harness and explicit direct Ethereum bootstrap (15-second request limit). The optional check reads public token configuration from the application API; it does not call Tijori's paid-write API. No credentials, identity keys, or object data are sent to the worker. Nym/gateway availability, WebRTC policies, CSP, bundle resolvers, and Ethereum bootstrap may block the flow; errors never enable a direct destination request.
 
 Unit tests cover allowed reads, JSON-RPC validation, chain mismatch, session success/failure/deadline/cancellation cleanup and absence of direct fetch in the application transport. These use local fixtures and do not establish live anonymity.
 

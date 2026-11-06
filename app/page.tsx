@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
 import { TijoriApp, TijoriProvider } from '@tijori/react';
 import PhoneAccess from './components/PhoneAccess';
+import AnonymousWhitechainBalance from './components/AnonymousWhitechainBalance';
 import { LegacyPassphraseLogin, LegacyVault, PendingSafeResume } from './legacy';
 
 // The Tijori app is a merchant of its own SDK: it installs @tijori/* from npm like any integrator.
@@ -15,6 +16,7 @@ export default function Home() {
    authAlternative={{ label: 'Use existing passphrase identity', render: () => <LegacyPassphraseLogin /> }}
    authFooter={<>TIJORI &nbsp; · &nbsp; BUILT FOR TOGETHER &nbsp; · &nbsp; <Link href="/diagnostics/anon-rpc">Anon RPC diagnostic</Link></>}
    renderVault={vault => <LegacyVault vault={vault} />}
+   vaultExtras={vault => vault.safe?.chainId === 1874 ? <AnonymousWhitechainBalance key={vault.id} address={vault.safe.address} /> : null}
    dashboardExtras={<><PendingSafeResume /><PhoneAccess /></>}
    footer={<><Link href="/diagnostics/anon-rpc">Anon RPC diagnostic</Link><span><ShieldCheck size={15} /> Made for trust, built for together.</span><span><a href="https://www.npmjs.com/org/tijori" target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Built with the Tijori SDK ↗</a></span></>}
   />

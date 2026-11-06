@@ -1,6 +1,6 @@
 // Host side of Anon RPC: run on a dedicated same-origin page (loaded hidden in an iframe by requestViaNym).
 // Usage in that page: useEffect(() => startAnonRpcHost(), []). Returns a cleanup function.
-import { NYM_SPECIFIER, parseRpcQuantity, validateReadRequest, type ReadRequest } from './anon-rpc-protocol.ts';
+import { NYM_SPECIFIER, parseRpcBalanceOf, parseRpcQuantity, validateReadRequest, type ReadRequest } from './anon-rpc-protocol.ts';
 
 export function startAnonRpcHost(options: { bootstrapRpcUrl?: string } = {}): () => void {
  if (window.parent === window) return () => {};
@@ -40,7 +40,8 @@ export function startAnonRpcHost(options: { bootstrapRpcUrl?: string } = {}): ()
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: request.method, params: request.params }),
    });
    if (!response.ok) throw new Error(`Destination RPC: HTTP ${response.status}`);
-   port.postMessage({ kind: 'result', result: parseRpcQuantity(await response.json()) });
+   const body = await response.json();
+   port.postMessage({ kind: 'result', result: request.method === 'eth_call' ? parseRpcBalanceOf(body) : parseRpcQuantity(body) });
   } catch (error) {
    port?.postMessage({ kind: 'error', message: error instanceof Error ? error.message : String(error) });
   } finally {
