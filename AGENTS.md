@@ -44,3 +44,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 <!-- END:nextjs-agent-rules -->
 
 Run `npm run build` before `npm test`; the integration test uses a local RPC fixture, throwaway signer and isolated durable journal directory with a production server. Tests do not spend testnet funds. Keep writes serialized across all local processes using the signer and shared persistent data directory. Do not expose this unauthenticated paid-write API publicly. Missing/expired/reset state and uncertain transactions must fail closed; never automatically recreate or resend them. Back up encryption keys privately. The 100,000-byte aggregate is intended only for the small prototype.
+
+The versioned `/api/v1` scaffold and legacy routes share `lib/api/service.ts` and provider hooks in `lib/api/domain.ts` / `lib/integrations/`. Providers remain simulated/unconfigured as reported; on-device DINO/SlimSAM is a separate browser check. See docs/API.md.

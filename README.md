@@ -16,6 +16,12 @@ The laptop stores users, encrypted identity envelopes, groups, challenges and ma
 
 The UI labels this **LOCAL WI-FI TEST**. The default remains Arkiv unless explicitly configured otherwise; there is no automatic fallback when Arkiv fails. Local mode makes no Arkiv calls, never uses its signer/journal/budget, and disables Safe registration. Both modes use the same v5 domain schema and acoustic protocol. Switching back to `TICHORI_STORAGE_MODE=arkiv` selects the existing separate Arkiv state; local records are not automatically migrated, merged or uploaded. SQLite remains a read-only migration source. This unauthenticated demo belongs only on a trusted test LAN. Real acoustic decoding is not proof of proximity or identity and never authorizes transactions.
 
+## Reusable API and integration hooks
+
+The frontend uses `/api/v1/*` through a typed HTTP client. The server owns request discovery, approval eligibility, quorum presentation and Safe deployment preparation, with replaceable server providers for object matching, physical approvals and external-vault verification. Existing unversioned endpoints remain compatible. Object matching and physical providers are still simulations; external-vault verification returns HTTP 501 until an adapter is implemented. Browser encryption and user wallet signing remain on the device.
+
+See [the API integration guide](docs/API.md) for endpoint payloads, provider contracts, teammate wiring locations and the boundaries of this local scaffold. This does not add public API authentication, multi-application isolation or on-chain physical approval enforcement.
+
 ## Run locally
 
 Requires Node.js 22.20+ and a persistent writable filesystem. Bind the demo to localhost; this API has no real authentication or per-user spending authorization and must not be exposed publicly.
