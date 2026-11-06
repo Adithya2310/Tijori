@@ -6,6 +6,6 @@
     "start": "node server.mjs"
   },
   "dependencies": {
-    "@tijori/invoices": "0.1.0"
+    "@tijori/invoices": "0.2.0"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@tijori/invoices",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bill a Tijori treasury (Safe on Whitechain) in USDT and get paid when its signers approve together.",
   "type": "module",
   "main": "index.mjs",

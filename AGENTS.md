@@ -48,7 +48,7 @@ Use Node.js 22.20 or later, then `npm install`. Configure server-only Arkiv cred
 - `data/`: generated local state, never commit it.
 
 New object sign-ups use scanner v2.
-- **Enrollment:** a username plus a one-tap scan of about 3 angles. On-device SlimSAM isolates the object at the centre. DINOv2 produces the CLS token plus a foreground-only patch mean for each view, stored as a ~1 KB int8 view in an `objectProfile` v2 (1–5 views).
+- **Enrollment:** a username plus a one-tap scan of about 3 angles. On-device SlimSAM isolates the object in the guide circle: the largest candidate lying entirely inside it, or the user's brushing (positive and negative point prompts) when they choose "Brush over it". DINOv2 produces the CLS token plus a foreground-only patch mean for each view, stored as a ~1 KB int8 view in an `objectProfile` v2 (1–5 views).
 - **Login:** username plus one photo. The server's `dino-object-v2` provider (`@tijori/core/object-match`) compares the photo's descriptor and, only on a match, returns the key envelope plus the profile that derives its wrapping password.
 - **Throttling and listing:** wrong objects are throttled per identity, and `/v1/object-identities` lists usernames only.
 - **Approvals:** treasury approvals send a fresh photo descriptor, checked the same way.

@@ -91,3 +91,20 @@ test('the server matches the login photo, releases key material only on a match,
  resetObjectThrottle();
  assert.equal((await post('identities/login', { username: 'sub', objectQuery: packObjectQuery(bottle.view(0.06)) })).status, 200);
 });
+
+test('real photos: different everyday objects never match each other at the shipped threshold', async () => {
+ const { readFile } = await import('node:fs/promises');
+ const { unpackObjectView } = await import('@tijori/core/object-profile');
+ const { compareObjectViews } = await import('@tijori/core/object-match');
+ const { samples } = JSON.parse(await readFile(new URL('./fixtures/real-objects.json', import.meta.url), 'utf8')) as { samples: { label: string; view: string; objectFraction: number; grid: string }[] };
+ assert.ok(samples.length >= 3);
+ for (const sample of samples) {
+  assert.ok(sample.objectFraction > 0.01 && sample.objectFraction < 0.5, `${sample.label} was isolated, not the whole frame`);
+  assert.equal(sample.grid.length, 256);
+ }
+ for (let i = 0; i < samples.length; i++) for (let j = i + 1; j < samples.length; j++) {
+  if (samples[i].label === samples[j].label) continue;
+  const { score } = compareObjectViews(unpackObjectView(samples[i].view), unpackObjectView(samples[j].view));
+  assert.ok(score < OBJECT_MATCH_THRESHOLD - 0.3, `${samples[i].label} vs ${samples[j].label} scored ${score.toFixed(3)}`);
+ }
+});

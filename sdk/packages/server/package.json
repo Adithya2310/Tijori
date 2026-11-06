@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "author": "Tijori contributors",
@@ -53,7 +53,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@tijori/core": "0.1.0",
+    "@tijori/core": "0.2.0",
     "@arkiv-network/sdk": "1.0.1",
     "@safe-global/protocol-kit": "^8.0.11",
     "@safe-global/safe-deployments": "^1.37.67"

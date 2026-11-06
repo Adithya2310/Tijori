@@ -235,16 +235,18 @@ An identity is a **username linked to a personal object**. You log in with the u
    3. Turn the object slowly for about 2 seconds while three angles are captured automatically. There is no tapping or dragging: the object at the centre is isolated for you.
    4. Click **Register username & object**.
 2. **Log in:** enter the username, take one photo of the object and click **Log in with my object**.
-3. Payout approvals in a Whitechain vault ask for one fresh photo too. It is checked on the server together with presence and your own signature.
+3. Every photo shows its cut-out (what was scanned). If it isn't just your object, click **Not your object? Brush over it**, paint over the object and click **Use my brushing**. For a sign-up scan, one brushing applies to all three angles.
+4. Payout approvals in a Whitechain vault ask for one fresh photo too. It is checked on the server together with presence and your own signature.
 
 **How matching works**
 1. **On this device:**
-   - SlimSAM isolates the object at the centre of each photo. It keeps the whole object that contains the centre point, pads it to a square on white and never stretches it.
+   - SlimSAM isolates the object in the guide circle. Its candidates are nested (a part, the object, object + hand or face), so it keeps the largest candidate lying entirely inside the circle, which leaves out the person holding the object. With brushing, the painted area becomes positive points and a ring around it negative points, and the smallest candidate covering 70% of the painting wins. The cut-out is padded to a square on white and never stretched.
    - DINOv2-small then produces two vectors: the CLS token, and the mean of the patch tokens that cover the object. The background is excluded.
    - Photos and masks never leave the browser. Only these descriptors (about 1 KB per view) are sent.
 2. **On the server (`@tijori/server`):**
    - At login, the server compares the photo's descriptor with the enrolled views: `score = w·cos(CLS) + (1 − w)·cos(object)`.
-   - The identity matches when the best view reaches the threshold (`OBJECT_MATCH_CLS_WEIGHT` and `OBJECT_MATCH_THRESHOLD` in `@tijori/core/object-match`, calibrated with real photos).
+   - The identity matches when the best view reaches the threshold (`OBJECT_MATCH_CLS_WEIGHT` 0.5 and `OBJECT_MATCH_THRESHOLD` 0.80 in `@tijori/core/object-match`).
+   - 0.80 is a conservative default. On real photos, different objects score 0.12–0.33 (a regression test in `sdk/tests/fixtures/real-objects.json`). Same-object angle tolerance has not been measured on real photos yet, so a very different angle may need a retake. Tune it with the object lab.
    - Only on a match does the server return the encrypted key envelope and the profile that derives its wrapping password.
    - Wrong-object attempts are throttled (5 per 10 minutes per identity).
    - `/api/v1/object-identities` lists usernames only.
