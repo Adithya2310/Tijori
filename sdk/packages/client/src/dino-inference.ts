@@ -1,7 +1,7 @@
 import { pipeline, env, RawImage, type ImageFeatureExtractionPipeline } from '@huggingface/transformers';
 import { DINO_MODEL, DINO_REVISION, DINO_RUNTIME_VERSION, featuresFromTokens, type DinoFeatures } from '@tijori/core/dino';
 import { assetBaseUrl, modelsUrl, runtimeUrl } from './assets.ts';
-import { CENTRE, poolForeground, type ObjectPoint, type ObjectScanResult } from './object-geometry.ts';
+import { CENTRE, poolForeground, type ObjectBrush, type ObjectPoint, type ObjectScanResult } from './object-geometry.ts';
 export { poolForeground, FOREGROUND_COVERAGE, type ObjectScanResult } from './object-geometry.ts';
 
 // On-device DINOv2 inference, shared by the worker and the in-page fallback. Never used on a server.
@@ -79,14 +79,14 @@ export async function runDinoInference(imageBlob: Blob, progress: (message: stri
 }
 
 /** Isolate the object at `point` (default: the centre) and compute its scanner v2 descriptor, in this thread. */
-export async function runObjectDescriptor(imageBlob: Blob, progress: (message: string) => void, cancelled: () => boolean = () => false, point: ObjectPoint = CENTRE, base?: string): Promise<ObjectScanResult> {
+export async function runObjectDescriptor(imageBlob: Blob, progress: (message: string) => void, cancelled: () => boolean = () => false, point: ObjectPoint = CENTRE, base?: string, brush?: ObjectBrush): Promise<ObjectScanResult> {
  if (typeof WebAssembly === 'undefined') throw Error('WebAssembly is unavailable in this browser.');
  configureDinoRuntime(base);
  listeners.add(progress);
  try {
   const model = await loadExtractor(progress, cancelled);
   const { isolateObjectRegion } = await import('./object-isolation.ts');
-  const isolated = await isolateObjectRegion(imageBlob, point, progress, cancelled);
+  const isolated = await isolateObjectRegion(imageBlob, point, progress, cancelled, brush);
   progress('Reading your object on this device…');
   const { data, dims } = await embed(model, isolated.blob, cancelled);
   const { cls, fg, foregroundPatches } = poolForeground(data, dims, isolated.grid);

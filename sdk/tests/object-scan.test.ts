@@ -75,3 +75,26 @@ test('inside the guide circle, the object wins over the hand and person holding 
  assert.equal(chooseMask(masks, [0.9, 0.97, 0.95], size, seed, disc), 0);
  assert.ok(disc.reduce((a, b) => a + b, 0) / size < 0.5, 'the circle covers well under half a landscape photo');
 });
+
+test('brushing becomes SAM prompts, and the smallest mask covering the painting wins', async () => {
+ const g = await import('@tijori/client/object-geometry');
+ const w = 100, h = 80, size = w * h;
+ const brush = { radius: 0.05, strokes: [[{ x: 0.5, y: 0.3 }, { x: 0.5, y: 0.7 }]] };
+ assert.ok(g.validBrush(brush)); assert.equal(g.validBrush({ radius: 0.05, strokes: [] }), false); assert.equal(g.validBrush({ radius: 0.05, strokes: [[{ x: 2, y: 0 }]] }), false);
+ const painted = g.rasterizeBrush(brush, w, h);
+ const area = painted.reduce((a, b) => a + b, 0);
+ assert.ok(area > 100 && area < 600, `a short thick stroke (${area} px)`);
+ const prompt = g.brushPrompts(painted, w, h);
+ const positives = prompt.points.filter((_, i) => prompt.labels[i] === 1), negatives = prompt.points.filter((_, i) => prompt.labels[i] === 0);
+ assert.ok(positives.length >= 5 && positives.every(([x, y]) => painted[Math.round(y) * w + Math.round(x)]), 'positives lie on the painting');
+ assert.ok(negatives.length >= 4 && negatives.every(([x, y]) => !painted[Math.round(y) * w + Math.round(x)]), 'negatives lie off the painting');
+ // Nested masks: the stroke's object (column 44–56), object + hand (wider), and a part (a small square).
+ const masks = new Uint8Array(size * 3);
+ for (let y = 20; y < 60; y++) for (let x = 44; x < 57; x++) masks[y * w + x] = 1;
+ for (let y = 15; y < 80; y++) for (let x = 20; x < 90; x++) masks[size + y * w + x] = 1;
+ for (let y = 38; y < 44; y++) for (let x = 46; x < 54; x++) masks[2 * size + y * w + x] = 1;
+ assert.equal(g.chooseBrushedMask(masks, size, painted), 0);
+ assert.equal(g.chooseBrushedMask(masks.slice(2 * size), size, painted), -1, 'a part alone does not cover the painting');
+ const kept = g.regionTouching(masks.subarray(size, 2 * size), painted, w, h);
+ assert.equal(kept.reduce((a, b) => a + b, 0), 70 * 65, 'the connected region touching the painting is kept');
+});

@@ -96,3 +96,77 @@ export function poolForeground(tokens: ArrayLike<number>, dims: readonly number[
  weights.forEach((weight, patch) => { if (weight) for (let i = 0; i < dimension; i++) fg[i] += weight * tokens[(patch + 1) * dimension + i]; });
  return { cls, fg, foregroundPatches: used };
 }
+
+// ---------- Brush: the user paints over the object to say exactly what to register ----------
+/** One stroke, as points in 0–1 photo coordinates. */
+export type BrushStroke = { x: number; y: number }[];
+/** Strokes plus the brush radius as a fraction of the photo's shorter side. */
+export type ObjectBrush = { strokes: BrushStroke[]; radius: number };
+export const validBrush = (brush: unknown): brush is ObjectBrush => {
+ const b = brush as ObjectBrush;
+ return !!b && Array.isArray(b.strokes) && b.strokes.length > 0 && b.strokes.length <= 50 && typeof b.radius === 'number' && b.radius > 0 && b.radius < 0.5
+  && b.strokes.every(s => Array.isArray(s) && s.length > 0 && s.length <= 2000 && s.every(p => Number.isFinite(p?.x) && Number.isFinite(p?.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1));
+};
+/** Paint the strokes into a `width` × `height` mask (discs along each segment). */
+export function rasterizeBrush(brush: ObjectBrush, width: number, height: number): Uint8Array {
+ const mask = new Uint8Array(width * height), r = Math.max(1, brush.radius * Math.min(width, height));
+ const disc = (cx: number, cy: number) => {
+  for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(height - 1, Math.ceil(cy + r)); y++)
+   for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(width - 1, Math.ceil(cx + r)); x++)
+    if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) mask[y * width + x] = 1;
+ };
+ for (const stroke of brush.strokes) {
+  const points = stroke.map(p => ({ x: p.x * (width - 1), y: p.y * (height - 1) }));
+  points.forEach((p, i) => {
+   const q = points[i + 1] ?? p, steps = Math.max(1, Math.ceil(Math.hypot(q.x - p.x, q.y - p.y) / (r / 2)));
+   for (let s = 0; s <= steps; s++) disc(p.x + (q.x - p.x) * s / steps, p.y + (q.y - p.y) * s / steps);
+  });
+ }
+ return mask;
+}
+export type BrushPrompt = { points: [number, number][]; labels: number[]; box: { left: number; top: number; right: number; bottom: number } };
+/**
+ * Turn a brushed mask into SAM prompts: positive points spread over the brushed area, and negative points on a ring
+ * around it (just outside its bounding box), so neighbouring things (a hand, a face, the table) are excluded.
+ */
+export function brushPrompts(mask: Uint8Array, width: number, height: number, maxPositives = 10): BrushPrompt {
+ let left = width, top = height, right = -1, bottom = -1; const painted: number[] = [];
+ for (let i = 0; i < mask.length; i++) if (mask[i]) { const x = i % width, y = (i - x) / width; painted.push(i); if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y; }
+ if (!painted.length) throw Error('Brush over your object first.');
+ // Positives: evenly spaced through the painted pixels (row-major order spreads them across the object).
+ const step = Math.max(1, Math.floor(painted.length / maxPositives));
+ const positives: [number, number][] = [];
+ for (let k = Math.floor(step / 2); k < painted.length && positives.length < maxPositives; k += step) { const i = painted[k], x = i % width; positives.push([x, (i - x) / width]); }
+ // Negatives: corners and edge midpoints of the box grown by a quarter of its size, skipping painted pixels.
+ const margin = Math.max(12, 0.25 * Math.max(right - left, bottom - top));
+ const box = { left: Math.max(0, left - margin), top: Math.max(0, top - margin), right: Math.min(width - 1, right + margin), bottom: Math.min(height - 1, bottom + margin) };
+ const midX = (box.left + box.right) / 2, midY = (box.top + box.bottom) / 2;
+ const negatives = ([[box.left, box.top], [midX, box.top], [box.right, box.top], [box.right, midY], [box.right, box.bottom], [midX, box.bottom], [box.left, box.bottom], [box.left, midY]] as [number, number][])
+  .filter(([x, y]) => !mask[Math.round(y) * width + Math.round(x)]);
+ return { points: [...positives, ...negatives], labels: [...positives.map(() => 1), ...negatives.map(() => 0)], box };
+}
+/**
+ * Choose the SAM mask for the brushing. SAM's candidates are nested (part, object, object + hand or face). Parts
+ * miss much of the painting; bigger regions add things the user did not paint. So take the smallest mask that still
+ * covers at least 70% of the painted pixels. Returns -1 when none does (then the painting itself is used).
+ */
+export function chooseBrushedMask(masks: Uint8Array, size: number, painted: Uint8Array): number {
+ let paintedArea = 0; for (let i = 0; i < size; i++) paintedArea += painted[i];
+ let best = -1, bestArea = Infinity;
+ for (let k = 0; (k + 1) * size <= masks.length; k++) {
+  let area = 0, covered = 0;
+  for (let i = 0; i < size; i++) if (masks[k * size + i]) { area++; if (painted[i]) covered++; }
+  if (paintedArea && covered / paintedArea >= 0.7 && area < bestArea) { best = k; bestArea = area; }
+ }
+ return best;
+}
+/** Keep the parts of `mask` connected to painted pixels (4-connected flood fill from the painting). */
+export function regionTouching(mask: Uint8Array, painted: Uint8Array, width: number, height: number): Uint8Array {
+ const keep = new Uint8Array(mask.length), stack: number[] = [];
+ for (let i = 0; i < mask.length; i++) if (mask[i] && painted[i]) { keep[i] = 1; stack.push(i); }
+ while (stack.length) {
+  const i = stack.pop()!, x = i % width, y = (i - x) / width;
+  for (const j of [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, y > 0 ? i - width : -1, y < height - 1 ? i + width : -1]) if (j >= 0 && mask[j] && !keep[j]) { keep[j] = 1; stack.push(j); }
+ }
+ return keep;
+}

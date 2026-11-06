@@ -1,6 +1,6 @@
 // Module worker for on-device DINOv2. Keep the bootstrap small so runtime import failures reach the page.
 // Jobs run one at a time; a worker may process several (a sign-up scan reuses the loaded models).
-type Job = { image: Blob; point?: { x: number; y: number }; assetBaseUrl?: string; mode?: 'features' | 'descriptor' };
+type Job = { image: Blob; point?: { x: number; y: number }; assetBaseUrl?: string; mode?: 'features' | 'descriptor'; brush?: import('./object-geometry.ts').ObjectBrush };
 let running = false;
 self.onmessage = async (event: MessageEvent<Job>) => {
  if (running) return;
@@ -10,7 +10,7 @@ self.onmessage = async (event: MessageEvent<Job>) => {
   const inference = await import('./dino-inference.ts');
   const progress = (message: string) => self.postMessage({ status: 'progress', message });
   if (event.data.mode === 'descriptor') {
-   const result = await inference.runObjectDescriptor(event.data.image, progress, () => false, event.data.point, event.data.assetBaseUrl);
+   const result = await inference.runObjectDescriptor(event.data.image, progress, () => false, event.data.point, event.data.assetBaseUrl, event.data.brush);
    self.postMessage({ status: 'complete', result });
   } else {
    const features = await inference.runDinoInference(event.data.image, progress, () => false, event.data.point, event.data.assetBaseUrl);

@@ -1,6 +1,6 @@
 import { validDinoFeatures, type DinoFeatures } from '@tijori/core/dino';
 import { assetBaseUrl, resolveAssetBase } from './assets.ts';
-import type { ObjectPoint, ObjectScanResult } from './object-geometry.ts';
+import type { ObjectBrush, ObjectPoint, ObjectScanResult } from './object-geometry.ts';
 
 export type ExtractOptions = {
  /** Tap point (0–1 relative coordinates) to isolate the object with SlimSAM before DINOv2. */
@@ -79,6 +79,8 @@ export type DescriptorOptions = Omit<ExtractOptions, 'point'> & {
  point?: ObjectPoint;
  /** Called after each photo with its index and result. */
  onResult?: (index: number, result: ObjectScanResult) => void;
+ /** The user's brushing over the object (applied to every photo, e.g. all angles of a scan). Default: the centre. */
+ brush?: ObjectBrush;
 };
 const validResult = (value: unknown): value is ObjectScanResult => {
  const r = value as ObjectScanResult;
@@ -111,14 +113,14 @@ export function extractObjectDescriptors(images: Blob[], options: DescriptorOpti
    inPage = true; stopWorker(); options.onFallback?.(reason);
    try {
     const { runObjectDescriptor } = await import('./dino-inference.ts');
-    while (!done && results.length < images.length) accept(await runObjectDescriptor(images[results.length], progress, () => done, options.point, base));
+    while (!done && results.length < images.length) accept(await runObjectDescriptor(images[results.length], progress, () => done, options.point, base, options.brush));
     settle();
    } catch (error) { settle(error instanceof Error ? error : new Error('On-device processing failed.')); }
   };
   const next = () => {
    if (done) return;
    if (results.length === images.length) { settle(); return; }
-   worker!.postMessage({ image: images[results.length], point: options.point, assetBaseUrl: base, mode: 'descriptor' });
+   worker!.postMessage({ image: images[results.length], point: options.point, assetBaseUrl: base, mode: 'descriptor', brush: options.brush });
   };
   if (!images.length) { resolve([]); return; }
   if (options.signal?.aborted) { abort(); return; }

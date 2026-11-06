@@ -1,7 +1,7 @@
 import { SamModel, AutoProcessor, RawImage, type SamProcessor } from '@huggingface/transformers';
 export const SAM_MODEL = 'Xenova/slimsam-77-uniform';
 export const SAM_REVISION = '5850ab45f587c112167512ffef949107115e26a0';
-import { CENTRE, OBJECT_NOT_FOUND, MAX_OBJECT_FRACTION, MIN_OBJECT_FRACTION, chooseMask, guideDisc, regionAt, squareCrop, type ObjectPoint } from './object-geometry.ts';
+import { CENTRE, OBJECT_NOT_FOUND, MAX_OBJECT_FRACTION, MIN_OBJECT_FRACTION, brushPrompts, chooseBrushedMask, chooseMask, guideDisc, rasterizeBrush, regionAt, regionTouching, squareCrop, validBrush, type ObjectBrush, type ObjectPoint } from './object-geometry.ts';
 export { CENTRE, PATCH_GRID, OBJECT_NOT_FOUND, type ObjectPoint } from './object-geometry.ts';
 export type IsolatedObject = {
  /** Square PNG: the object on white, centred and padded (never stretched). */
@@ -24,7 +24,8 @@ const toPng = (canvas: Canvas): Promise<Blob> => typeof OffscreenCanvas !== 'und
  * Isolate the object at `point` (default: the centre) with SlimSAM, on this device. Returns a square crop of the
  * object on white plus its patch coverage grid, or throws OBJECT_NOT_FOUND when no plausible object is there.
  */
-export async function isolateObjectRegion(blob: Blob, point: ObjectPoint = CENTRE, progress: (message: string) => void = () => {}, cancelled: () => boolean = () => false): Promise<IsolatedObject> {
+export async function isolateObjectRegion(blob: Blob, point: ObjectPoint = CENTRE, progress: (message: string) => void = () => {}, cancelled: () => boolean = () => false, brush?: ObjectBrush): Promise<IsolatedObject> {
+ if (brush !== undefined && !validBrush(brush)) throw Error('Brush over your object again.');
  if (!Number.isFinite(point.x) || !Number.isFinite(point.y) || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) throw Error('Tap inside the object photo.');
  progress('Loading object isolation on this device…');
  model ??= SamModel.from_pretrained(SAM_MODEL, { revision: SAM_REVISION, device: 'wasm', dtype: 'q8' }).catch(e => { model = undefined; throw e; });
@@ -39,17 +40,31 @@ export async function isolateObjectRegion(blob: Blob, point: ObjectPoint = CENTR
   image = image.rgba();
   // Snapshot the pixels first: SAM's preprocessing converts the same image to RGB in place.
   const { width, height } = image, pixels = new Uint8ClampedArray(image.data);
-  const seed = { x: point.x * width, y: point.y * height };
-  const inputs = await preprocess(image, { input_points: [[[seed.x, seed.y]]] });
-  progress('Finding your object on this device…');
-  const output = await sam(inputs);
-  const masks = await (preprocess as SamProcessor).post_process_masks(output.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes);
-  const scores = Array.from(output.iou_scores.data as Float32Array), all = masks[0].data as Uint8Array, size = width * height;
-  // Only what lies inside the guide circle counts: hands, arms and background outside it are ignored.
-  const disc = guideDisc(width, height);
-  const chosen = chooseMask(all, scores, size, Math.min(height - 1, Math.round(seed.y)) * width + Math.min(width - 1, Math.round(seed.x)), disc);
-  const inCircle = all.slice(chosen * size, (chosen + 1) * size).map((value, i) => (value && disc[i] ? 1 : 0));
-  const region = regionAt(inCircle, width, height, seed);
+  const size = width * height;
+  const segment = async (points: [number, number][], labels?: number[]) => {
+   const inputs = await preprocess(image, labels ? { input_points: [[points]], input_labels: [[labels]] } : { input_points: [[points]] });
+   progress('Finding your object on this device…');
+   const output = await sam(inputs);
+   const masks = await (preprocess as SamProcessor).post_process_masks(output.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes);
+   return { all: masks[0].data as Uint8Array, scores: Array.from(output.iou_scores.data as Float32Array) };
+  };
+  let region: Uint8Array;
+  if (brush) {
+   // The user painted over the object: points on it, "not this" points around it, and the mask that best
+   // matches the painting. If SAM disagrees with the painting, the painting itself is the object.
+   const painted = rasterizeBrush(brush, width, height), prompt = brushPrompts(painted, width, height);
+   const { all } = await segment(prompt.points, prompt.labels);
+   const chosen = chooseBrushedMask(all, size, painted);
+   const inBox = (i: number) => { const x = i % width, y = (i - x) / width; return x >= prompt.box.left && x <= prompt.box.right && y >= prompt.box.top && y <= prompt.box.bottom; };
+   region = chosen < 0 ? painted : regionTouching(all.slice(chosen * size, (chosen + 1) * size).map((value, i) => (value && inBox(i) ? 1 : 0)), painted, width, height);
+  } else {
+   const seed = { x: point.x * width, y: point.y * height };
+   const { all, scores } = await segment([[seed.x, seed.y]]);
+   // Only what lies inside the guide circle counts: hands, arms and background outside it are ignored.
+   const disc = guideDisc(width, height);
+   const chosen = chooseMask(all, scores, size, Math.min(height - 1, Math.round(seed.y)) * width + Math.min(width - 1, Math.round(seed.x)), disc);
+   region = regionAt(all.slice(chosen * size, (chosen + 1) * size).map((value, i) => (value && disc[i] ? 1 : 0)), width, height, seed);
+  }
   const crop = squareCrop(region, width, height);
   if (!crop || crop.objectFraction < MIN_OBJECT_FRACTION || crop.objectFraction > MAX_OBJECT_FRACTION) throw Error(OBJECT_NOT_FOUND);
   if (cancelled()) throw Error('Cancelled.');

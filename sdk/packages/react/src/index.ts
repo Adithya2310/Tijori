@@ -11,3 +11,4 @@ export { default as ProximityCheck } from './components/ProximityCheck.tsx';
 export { default as ObjectIdentityForm, type ObjectSignUpBody, type ObjectLoginBody, type ObjectIdentityFormProps } from './components/ObjectIdentityForm.tsx';
 export { default as ObjectCapture, type ObjectCaptureProps } from './components/ObjectCapture.tsx';
 export { default as CameraCapture, type CameraCaptureProps } from './components/CameraCapture.tsx';
+export { default as BrushPad, type BrushPadProps } from './components/BrushPad.tsx';
