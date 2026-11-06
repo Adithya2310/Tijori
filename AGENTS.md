@@ -10,6 +10,12 @@ Tijori is a local Next.js prototype for address-based demo identities and group 
 Use Node.js 22.20 or later, then `npm install`. Configure server-only Arkiv credentials, an independent state encryption key and explicit cumulative fee allowance using `.env.example`. Follow README.md, run `npm run arkiv:check`, and run `npm run arkiv:migrate` before first signup to import an existing SQLite demo. Start with `npm run dev -- --hostname 127.0.0.1` and open http://localhost:3000. SQLite is only a read-only migration source. Do not delete Arkiv journals to reset state or spending limits. The server needs a writable persistent filesystem; this setup is not suitable for stateless/serverless deployment.
 
 ## Structure and contracts
+- `packages/` is the npm SDK: `@tijori/core`, `@tijori/server`, `@tijori/client`, `@tijori/react` and `@tijori/invoices`, versioned together with Changesets (`npm run changeset`).
+  - `npm run build:packages` runs `tsc -b` plus `scripts/postbuild-packages.mjs`.
+  - The reference app imports the packages from source through tsconfig `paths`, and Node tests use `--conditions=@tijori/source`. `examples/dao-site` consumes the built `dist` like an npm install would.
+  - Keep `@tijori/core` and the client's browser code free of `node:*` imports.
+  - Never rename the identifiers in `@tijori/core/legacy`.
+  - The integration guide is `docs/SDK.md`.
 - `app/page.tsx`: the reference app is `<TijoriProvider><TijoriApp/></TijoriProvider>` from `@tijori/react` (object sign-up/login, dashboard, Whitechain vaults, treasury and acoustic checks) plus app-only slots in `app/legacy.tsx` (passphrase login, Base Sepolia Safes, simulated legacy approvals) and `PhoneAccess`.
 - `packages/react/src/components/ProximityCheck.tsx`: two-minute acoustic broadcast/listen dialog, non-overlapping read-only polling, local expiry clock and audio cleanup.
 - `packages/server/src/handler.ts` (`/api/proximity` and `/api/v1/proximity`) and `packages/core/src/proximity.ts`: declared membership, session start/status/verify/cancel, unique challenges, idempotent starts/matches/stops. All mutations use the shared Arkiv lock and encrypted aggregate; polling never writes. Storage failures return 503.

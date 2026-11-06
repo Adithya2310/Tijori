@@ -2,6 +2,16 @@
 
 A local prototype for demo identities and shared treasuries. New vaults are presence-guarded Safe multisig treasuries on **Whitechain Sepolia, chain 1874**, holding USDT; vaults created earlier on Base Sepolia (84532) stay readable. Vault metadata and existing demo records persist in an encrypted Arkiv entity on **Rabdi, chain 7794095**, using `@arkiv-network/sdk` 1.0.1. SQLite is used only by the explicit, one-time migration command.
 
+## Use Tijori in your own app (SDK)
+
+The app is also published as npm packages:
+- `@tijori/server`: a self-hosted backend.
+- `@tijori/client`: browser building blocks.
+- `@tijori/react`: a drop-in `<TijoriApp/>` and composable components.
+- `@tijori/invoices`: an SDK for vendors billing a vault.
+
+A DAO site or marketplace can add object sign-in, gasless Whitechain vaults with co-present approvals, and acoustic attendance with one backend route and one component. See [docs/SDK.md](docs/SDK.md) and the runnable [examples/dao-site](examples/dao-site). This reference app is built from the same packages (`lib/tijori.ts`, `app/page.tsx`).
+
 New identities use a real browser-side DINOv2 object-matching experiment adapted from VILA. The photo check is bypassable and provides no secure authentication or wallet recovery. Existing passphrase identities retain their original login path. Acoustic checks use real ggwave WASM, browser audio and opt-in microphone access, with sessions and matches persisted in the encrypted Arkiv aggregate. A match is a cooperative demo, not proof of physical proximity or identity; challenges can be replayed or relayed. Existing demo vaults and their requests remain simulated. New Safe vaults have real testnet contracts and signer-enforced thresholds; their transactions are handled in the Safe app, not by the demo approval flow. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
 
 ## Wi-Fi acoustic testing without Arkiv

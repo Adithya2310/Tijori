@@ -3,7 +3,7 @@
 // - fail if any emitted JS still references a '.ts' module path;
 // - ensure every source file that starts with 'use client' keeps the directive in its emitted JS;
 // - copy vendored third-party files (src/vendor/*) verbatim, with their hand-written declarations.
-import { copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 
 const root = new URL('../packages/', import.meta.url).pathname;
@@ -31,6 +31,11 @@ for (const pkg of ['core', 'server', 'client', 'react']) {
   const emitted = await readFile(out, 'utf8').catch(() => '');
   if (!/^\s*['"]use client['"]/.test(emitted)) { console.error(`'use client' missing in ${relative(root, out)}`); problems++; }
  }
+}
+// Bin targets must be executable for workspace links (npm sets the bit itself on install from the registry).
+for (const pkg of ['server', 'client']) {
+ const manifest = JSON.parse(await readFile(join(root, pkg, 'package.json'), 'utf8'));
+ for (const target of Object.values(manifest.bin ?? {})) await chmod(join(root, pkg, target), 0o755).catch(() => { console.error(`Missing bin ${pkg}/${target}`); problems++; });
 }
 if (problems) { console.error(`${problems} packaging problem(s).`); process.exit(1); }
 console.log('Package output checks passed.');

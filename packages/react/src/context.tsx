@@ -181,7 +181,7 @@ export function TijoriProvider({ children, baseUrl, client: given, assetBaseUrl,
  const style: Record<string, string> = {};
  if (theme?.ink) style['--tj-ink'] = theme.ink;
  if (theme?.muted) style['--tj-muted'] = theme.muted;
- if (theme?.accent) style['--tj-green'] = theme.accent;
+ if (theme?.accent) { style['--tj-accent'] = theme.accent; style['--tj-accent-hover'] = theme.accent; style['--tj-green'] = theme.accent; }
  if (theme?.line) style['--tj-line'] = theme.line;
  if (theme?.background) style['--tj-bg'] = theme.background;
  if (theme?.font) style['--tj-font'] = theme.font;

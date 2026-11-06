@@ -98,7 +98,7 @@ test('vendored ggwave is an ES module without Node require() calls', async () =>
  assert.match(source, /sha256 f3792b5c185345a35a935ca68a5064b97f979d13fbba0062ff16f6b3b31a6113/);
 });
 
-test('the client package ships the same third-party notices as the repository', async () => {
+test('packages with third-party code ship the same notices as the repository', async () => {
  const read = (path: string) => readFile(new URL(path, import.meta.url), 'utf8');
- assert.equal(await read('../packages/client/THIRD_PARTY_NOTICES.md'), await read('../THIRD_PARTY_NOTICES.md'), 'run: cp THIRD_PARTY_NOTICES.md packages/client/');
+ for (const pkg of ['core', 'client']) assert.equal(await read(`../packages/${pkg}/THIRD_PARTY_NOTICES.md`), await read('../THIRD_PARTY_NOTICES.md'), `run: cp THIRD_PARTY_NOTICES.md packages/${pkg}/`);
 });

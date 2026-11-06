@@ -72,6 +72,7 @@
     "contracts",
     "packages/*/dist",
     "examples/*/node_modules",
-    "examples/*/.next"
+    "examples/*/.next",
+    "examples"
   ]
 }
