@@ -25,9 +25,9 @@ try {
    try {
     const columns = db.prepare('PRAGMA table_info(wallets)').all() as { name: string }[];
     const world = columns.some(c => c.name === 'world_id') ? 'world_id' : "'legacy-' || id AS world_id";
-    vault.wallets = db.prepare(`SELECT id,name,object_name,${world},created_at FROM wallets ORDER BY created_at,rowid`).all() as Wallet[];
-    vault.wallets.forEach(w => { w.world_id = w.world_id.toLowerCase(); });
-    vault.groups = (db.prepare('SELECT id,name,frequency,created_at FROM groups ORDER BY created_at,rowid').all() as Omit<Group, 'memberIds'>[]).map(g => ({ ...g, frequency: String(g.frequency), memberIds: (db.prepare('SELECT wallet_id FROM members WHERE group_id=? ORDER BY rowid').all(g.id) as { wallet_id: string }[]).map(m => m.wallet_id) }));
+    const legacy = db.prepare(`SELECT id,name,object_name,${world},created_at FROM wallets ORDER BY created_at,rowid`).all() as unknown as (Omit<Wallet, 'address'> & { world_id: string })[];
+    vault.wallets = validateVault({ ...vault, version: 2, wallets: legacy.map(w => ({ ...w, world_id: w.world_id.toLowerCase() })) }).wallets;
+    vault.groups = (db.prepare('SELECT id,name,frequency,created_at FROM groups ORDER BY created_at,rowid').all() as unknown as Omit<Group, 'memberIds'>[]).map(g => ({ ...g, frequency: String(g.frequency), memberIds: (db.prepare('SELECT wallet_id FROM members WHERE group_id=? ORDER BY rowid').all(g.id) as { wallet_id: string }[]).map(m => m.wallet_id) }));
     vault.transactions = (db.prepare('SELECT * FROM transactions ORDER BY created_at,rowid').all() as Omit<Transaction, 'approvalIds'>[]).map(t => ({ ...t, approvalIds: (db.prepare('SELECT wallet_id FROM approvals WHERE transaction_id=? ORDER BY rowid').all(t.id) as { wallet_id: string }[]).map(a => a.wallet_id) }));
    } finally { db.close(); }
    validateVault(vault);

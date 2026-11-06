@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@arkiv-network/sdk": "1.0.1",
+    "@safe-global/protocol-kit": "^8.0.11",
+    "@safe-global/safe-deployments": "^1.37.67",
     "lucide-react": "^1.69.0",
     "next": "^16.4.5",
     "react": "^19.3.1",
