@@ -1,3 +1,4 @@
 out/
 cache/
-broadcast/**/dry-run/
+# Local forge broadcast records (tx hashes are recorded in the README instead).
+broadcast/
