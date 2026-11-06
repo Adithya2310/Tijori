@@ -11,7 +11,7 @@ async function api(groupId:string,walletId:string,body?:object,operationId?:stri
  if(!response.ok) throw Error(result.error || 'Could not connect to the group check.');
  return result as {session:Session|null;nonce?:string};
 }
-export default function ProximityCheck({group,walletId}:{group:Group;walletId:string}) {
+export default function ProximityCheck({group,walletId,storageMode}:{group:Group;walletId:string;storageMode?:'local'|'arkiv'}) {
  const headingId=useId();
  const operationKey=`tichori-proximity:${group.id}:${walletId}`;
  const [session,setSession]=useState<Session|null>(null),[opened,setOpened]=useState(false),[mode,setMode]=useState<'idle'|'starting'|'permission'|'broadcasting'|'listening'>('idle'),[error,setError]=useState(''),[connectionError,setConnectionError]=useState(''),[level,setLevel]=useState(0),[now,setNow]=useState(()=>Date.now()),[audioReady,setAudioReady]=useState(false);
@@ -106,7 +106,7 @@ export default function ProximityCheck({group,walletId}:{group:Group;walletId:st
    <p className="modal-desc">{session?.hostId===walletId?'Your device plays an audible signal. Ask other members to open this vault and tap Join check.':'Listen near the broadcasting device. Keep this screen open and allow microphone access.'}</p>
    <div className="dial-wrap"><div className="dial"><div className="dial-inner"><AudioLines size={27}/><strong className="dial-listening">{ownMatch?'Signal matched':ended?'Check ended':mode==='starting'?'Starting…':mode==='permission'?'Allow microphone':mode==='broadcasting'?'Broadcasting':mode==='listening'?'Listening':'Ready'}</strong><small>{active?`${seconds}s remaining`:'ACOUSTIC CHECK'}</small></div></div></div>
    {mode==='listening'&&!ended&&<label>Microphone level<meter min="0" max="100" value={level} aria-label="Microphone level"/></label>}
-   <div className="signal-banner"><Radio size={20}/><div><strong>Acoustic matching only · No transfers</strong><small>Audio stays on your device. Decoded challenges and matches are stored in encrypted Arkiv state. Public storage metadata remains visible. A match can be replayed or relayed and does not guarantee physical proximity or verify identity.</small></div></div>
+   <div className="signal-banner"><Radio size={20}/><div><strong>Acoustic matching only · No transfers</strong><small>Audio stays on your device. Decoded challenges and matches are stored in {storageMode==='local'?'the laptop’s encrypted local database. No Arkiv writes are made.':'encrypted Arkiv state. Public storage metadata remains visible.'} A match can be replayed or relayed and does not guarantee physical proximity or verify identity.</small></div></div>
    <ul className="check-members">{group.members.map(m=><li key={m.id}><span>{m.name}</span><span>{session?.hostId===m.id?'Broadcaster':session?.matches.some(v=>v.walletId===m.id)?'Signal matched':'Waiting to join'}</span></li>)}</ul>
    {ownMatch&&<p className="form-hint">Matched at {new Date(ownMatch.verifiedAt).toLocaleTimeString()}. Recorded for this check only.</p>}
    {(error||connectionError)&&<div className="error" role="alert">{error||connectionError}</div>}

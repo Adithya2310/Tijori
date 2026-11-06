@@ -47,3 +47,13 @@ body{background:#080c14;color:#eef3ff}
 .acoustic-section{margin:30px 0;padding:22px;background:#101827;border:1px solid #26344b;border-radius:12px}.acoustic-section>.form-hint{line-height:1.7}.acoustic-section .group-actions{display:flex;gap:12px;margin-top:16px}.acoustic-section .group-actions button{background:#1a3156;color:#bdd2ff;border:1px solid #304c77;border-radius:7px;padding:12px 18px;display:flex;align-items:center;gap:8px}.acoustic-section .group-actions button:disabled{opacity:.5}
 
 .side-foot>div{min-width:0}.side-foot small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.side-foot>.avatar{flex-shrink:0}
+
+.object-identity-form,.object-capture{border:0;padding:0;margin:0;min-width:0;display:grid;gap:14px}.object-capture{border:1px solid var(--line);border-radius:9px;padding:14px}.object-capture legend{font-weight:600;padding:0 6px}.auth-form .object-consent{display:flex;align-items:flex-start;gap:9px;font-weight:400;line-height:1.5}.auth-form .object-consent input{width:auto;margin-top:3px;flex-shrink:0}.object-address{overflow-wrap:anywhere}.object-identity-form input[type=file]{max-width:100%;font-size:12px}
+
+.discovered-peers{display:grid;gap:10px;margin:16px 0}.peer-option{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:12px;border:1px solid var(--line);border-radius:8px;background:#f4f7f1;color:var(--ink)}.peer-option>span:first-child{min-width:0}.peer-option strong,.peer-option small{display:block}.peer-option small{font-size:10px;overflow-wrap:anywhere;color:var(--muted);margin-top:5px}.peer-option>span:last-child{white-space:nowrap}
+
+.scene-steps{display:flex;flex-wrap:wrap;gap:7px}.scene-step{font-size:10px;letter-spacing:.3px;padding:7px 9px;background:#edf3ec;border-radius:20px;color:var(--green)}.identity-backup{border-top:1px solid var(--line);padding-top:12px}.identity-backup summary{cursor:pointer;font-size:12px;color:var(--muted)}.identity-backup[open]{display:grid;gap:12px}
+
+.object-preview{display:block;width:100%;max-height:210px;object-fit:contain;background:#eff3eb;border-radius:9px}
+
+.object-isolation-photo{padding:0;border:0;background:none;width:100%;cursor:crosshair}.object-isolation-photo:disabled{opacity:1}
