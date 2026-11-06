@@ -15,3 +15,8 @@ tichori-object-demo-*.json
 
 # Downloaded public model/runtime assets (prepared before builds).
 public/dino-assets/
+# Local agent skills and notes (not shared)
+.agents/
+.claude/skills/whitechain-dev
+skills-lock.json
+whitechain.md
