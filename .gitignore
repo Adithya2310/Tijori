@@ -9,3 +9,9 @@ data/
 .next-phone/
 .next-phone-build/
 .local-https/
+
+# Object demo recovery files contain sufficient material to recover identity keys.
+tichori-object-demo-*.json
+
+# Downloaded public model/runtime assets (prepared before builds).
+public/dino-assets/
