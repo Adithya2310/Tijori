@@ -104,3 +104,30 @@ For Safe creation, request `/vaults/prepare`, review and submit the unsigned tra
 Add actual user authentication, application isolation and permissions, authenticated enrollment access, a reviewed enrollment/recovery protocol, durable proof/challenge/session handling, usage controls and an explicit allowed-origin policy. Keep private keys/passphrases local. If a physical approval must be mandatory, enforce it in the supported vault contracts and cover every execution path. The present API scaffold does not provide these guarantees.
 
 Run `npm run build`, then `npm test`, then `npm run lint`. Tests use local fixtures and do not spend testnet funds.
+
+## Whitechain treasury endpoints
+
+Guarded Safe vaults on Whitechain Sepolia (chain 1874). These endpoints share the router, body limits, origin rule and error mapping above. A missing relayer or contract configuration returns 501, and an invalid inbox key returns 401. Treasury payouts never use the legacy `transactions`/`approve` flow.
+
+| Method | Path | Input | Result |
+| --- | --- | --- | --- |
+| POST | `/vaults/whitechain` | `name`, `creatorId`, `addresses` (other signers' Tichori addresses); `Idempotency-Key` | The relayer deploys a majority Safe with `TichoriPresenceGuard` and the verifier installed at setup, verifies it on-chain, registers it. Returns scoped state and `vaultId`. A retry with the same key resumes and does not deploy again. |
+| POST | `/proposals` | `vaultId`, `proposerId`, plus `to` + `amount` (USDT decimal) + optional `note`, or `invoiceId`; `Idempotency-Key` | Pending payout (one Arkiv write). Invoice payouts take the vendor address and amount from the invoice. |
+| POST | `/approval-sessions` | `proposalId`, `initiatorId` (a current Safe owner) | Fixes the SafeTx at the live nonce (USDT transfer, vault-paid USDT gas refund capped by the signed fields), supersedes other open sessions for the vault and creates a presence challenge. Returns `{ session, emit }`; only the initiator receives `emit.code` to broadcast. |
+| GET | `/treasury/sessions?identityId=` | Demo identity | Open and recent sessions for that member's vaults: SafeTx fields to sign, quorum progress, presence `challengeId`. In simulated mode it also returns `simulatedCode`. |
+| POST | `/physical-approvals` with `sessionId` | `sessionId`, `walletId`, `objectName`, `evidence: { reference: heardCode, challengeId }`, `signature` (EIP-712 SafeTx signature by the approver's identity key) | Checks, for this approval: object (`ObjectMatchingProvider`), presence in this session (`PresenceSessionProvider`), signer = this identity and a current owner. At the threshold, the verifier signs the `CoPresence` attestation and the relayer calls `executeWithAttestation`. Returns the session (`executed` with `txHash`) and scoped state. |
+| POST | `/vaults/inbox-key` | `vaultId`, `identityId` (member) | `{ inboxKey, webhookSecret, endpoint }`. Derived from the server master key, so nothing secret is stored. |
+| POST | `/invoices` | `Authorization: Bearer tinbox_…`; `vendorName`, `vendorAddress`, `amount`, `memo`, `dueDate` (YYYY-MM-DD), optional `externalId` (idempotent) and `webhookUrl` | `{ invoice, created, receiptPath }`. |
+| GET | `/invoices?id=` | Bearer inbox key | Invoice with `payment { txHash, explorerUrl, paidAt, approvals }` once paid. |
+| POST | `/invoices/remind` | Bearer inbox key; `id` | Increments reminders, at most hourly. |
+| GET | `/treasury/export?vaultId=&identityId=` | Member | `text/csv` accountant export, with formula-safe cells. |
+| GET | `/relayer` | None | Gas tank: relayer WBT, payouts sponsored, USDT refunds received, limits, pending transaction. |
+
+**Webhooks:** `invoice.paid` is POSTed to the invoice's `webhookUrl` with header `Tichori-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">`. It is retried twice. Verify it with `verifyWebhook()` from `@tichori/invoices`. Private-network URLs require `TICHORI_WEBHOOK_ALLOW_PRIVATE=1`.
+
+**Presence provider:** implement `PresenceSessionProvider` (`createChallenge`, `verify`) in `lib/integrations`.
+- In the browser, the initiator's page dispatches `tichori:presence-emit` with `{ challengeId, code, expiresAt }` for the emitter.
+- Approvers' pages call `window.tichoriPresence.listen(challengeId)`, which resolves with the heard code.
+- The provider must reject relayed, replayed and stale evidence.
+
+**On-chain enforcement:** `TichoriPresenceGuard` blocks every Safe execution except attested ones, and the threshold signers must be the attested approvers. The unanimous-owner escape hatch can only remove the guard or rotate the verifier.

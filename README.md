@@ -1,8 +1,103 @@
 # Tichori
 
-A local prototype for demo identities and shared vaults. New vaults are Safe multisig contracts on **Base Sepolia, chain 84532**. Vault metadata and existing demo records persist in an encrypted Arkiv entity on **Rabdi, chain 7794095**, using `@arkiv-network/sdk` 1.0.1. SQLite is used only by the explicit, one-time migration command.
+A local prototype for demo identities and shared treasuries. New vaults are presence-guarded Safe multisig treasuries on **Whitechain Sepolia, chain 1874**, holding USDT; vaults created earlier on Base Sepolia (84532) stay readable. Vault metadata and existing demo records persist in an encrypted Arkiv entity on **Rabdi, chain 7794095**, using `@arkiv-network/sdk` 1.0.1. SQLite is used only by the explicit, one-time migration command.
 
 Identity matching, object scans, microphone listening and proximity remain simulations. Existing demo vaults and their requests remain simulated. New Safe vaults have real testnet contracts and signer-enforced thresholds; their transactions are handled in the Safe app, not by the demo approval flow. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
+
+## Whitechain treasury: co-present approvals for DAOs and large vaults
+
+Tichori is a treasury for DAOs, teams and families. A payout from the vault needs a **majority of its signers, physically together in one place**, and **each approver verifies with their personal object**. On Whitechain this becomes an on-chain rule, not a UI convention:
+
+- **The vault is a Safe 1.4.1 on Whitechain Sepolia** with a majority threshold. Its owners are the members' Tichori identity keys, which are generated and encrypted in the browser and unlocked by the person.
+- **`TichoriPresenceGuard`** is installed when the Safe is created. Every execution must carry a fresh EIP-712 co-presence attestation from the vault's Tichori verifier for exactly that Safe transaction, and the threshold signers must be the attested owners. Executing from the Safe app, or any path without the attestation, reverts. A unanimous-owner escape hatch can only remove the guard or rotate the verifier.
+- **Signers never touch crypto.** Approving is: show your object, have your phone hear the room code, tap Approve. That produces a free EIP-712 signature in the browser. There is no seed phrase, wallet popup, WBT or chain name. Tichori's relayer pays the gas, and **the vault refunds it in USDT** through Safe's native gas refund, capped by what the signers signed.
+- **Vendors bill the treasury** through an invoice inbox: the `@tichori/invoices` SDK plus signed `invoice.paid` webhooks, a public receipt and an accountant CSV.
+
+**Why this needs on-chain stablecoin settlement on Whitechain:**
+- **What a bank or card rail can't do:** neither can enforce *who must be in the room* before money moves, refuse a payment without a co-presence proof, or let vendors and auditors verify that rule independently.
+- **What Whitechain adds:** a guarded Safe holding USDT enforces the quorum and the presence attestation in the contract itself, then settles final in about 1 second for a fraction of a cent. Every payout, its approvers' attestation and its gas refund leave a public receipt nobody has to trust Tichori for.
+
+### Architecture
+
+```
+Vendor app ──@tichori/invoices──► POST /api/v1/invoices ──► invoice inbox (encrypted Arkiv aggregate, vault v4)
+Signer ──► POST /api/v1/proposals ──► POST /api/v1/approval-sessions (fixes SafeTx at live nonce, presence challenge)
+Each signer in the room: object check + presence (room code) + own EIP-712 Safe signature ──► POST /api/v1/physical-approvals
+Majority in ONE session ──► verifier signs CoPresence attestation ──► relayer ──► TichoriPresenceGuard.executeWithAttestation
+                                                                                   └► Safe.execTransaction: USDT → vendor; USDT gas refund → relayer
+Receipt: /invoice/[id] · webhook invoice.paid (HMAC) · GET /api/v1/treasury/export (CSV) · GET /api/v1/relayer (gas tank)
+```
+
+**Key files:**
+- `contracts/`: the Foundry project, with `TichoriPresenceGuard`, `TichoriSafeSetup` and tests against the canonical Safe 1.4.1 bytecode read from Whitechain.
+- `lib/whitechain/`: chain constants, EIP-712 helpers, the relayer (journaled, never resends) and the pure treasury domain.
+- `lib/api/treasury.ts`: the service behind the `/api/v1` routes.
+- `app/treasury-panel.tsx`: the UI.
+- `packages/tichori-invoices`: the vendor SDK.
+- `examples/vendor-studio`: a separate vendor app, where the integration is about 20 lines.
+
+### Deployed on Whitechain Sepolia
+
+| Item | Address / transaction |
+| --- | --- |
+| TichoriPresenceGuard (verified) | _added after deployment_ |
+| TichoriSafeSetup (verified) | _added after deployment_ |
+| First co-present USDT payout | _explorer link added after the first live payout_ |
+| USDT (hackathon token) | [`0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7`](https://explorer.testnet.whitechain.io/address/0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7) |
+
+### Set up the Whitechain treasury
+
+**Prerequisites:** [Foundry](https://getfoundry.sh) and the Arkiv setup under "Run locally" below. Run Foundry keystore commands in your own terminal, and never paste keys into chats or commits.
+
+1. **Prepare the contracts.** Run `git submodule update --init`, then `forge test --root contracts`.
+2. **Create the deployer and relayer keys.**
+   - Deployer: run `cast wallet import tichori-deployer --interactive`, then claim test WBT at https://faucet.testnet.whitechain.io.
+   - Relayer: create a key with `cast wallet new` and send it some WBT from the deployer.
+3. **Deploy and verify** the guard and setup hook (no owner or admin keys):
+   ```bash
+   cd contracts && forge script script/Deploy.s.sol --rpc-url whitechain_sepolia --account tichori-deployer \
+     --broadcast --verify --verifier blockscout --verifier-url https://explorer.testnet.whitechain.io/api/
+   ```
+4. **Fill in `.env`.** Set `TICHORI_GUARD_ADDRESS` and `TICHORI_SAFE_SETUP_ADDRESS` from the script output. Set `WHITECHAIN_RELAYER_PRIVATE_KEY`, plus a separate `TICHORI_VERIFIER_PRIVATE_KEY` (`cast wallet new`, no funds). See `.env.example` for the optional limits.
+5. **Start the app.** Run `npm run build && npm start -- --hostname 127.0.0.1`.
+6. **Create and fund a vault.** Sign up each signer, then **Create vault**: it is gasless, and the relayer deploys the guarded Safe. Send test USDT to the vault address.
+7. **Pay out.** **Propose payment** (or pay an inbox invoice), then **Start approval session**. Each signer in the room approves. At the majority, the payout executes on Whitechain.
+
+**How the business side pays for gas, and why the relayer can't be drained:**
+- **Who pays:** the relayer pays WBT, and each payout refunds it in USDT from the vault. The fee is part of the signed Safe transaction, so it can't be inflated.
+- **Where the WBT comes from:** on testnet, the faucet. In production, swapping collected USDT refunds to WBT on a Whitechain DEX, or buying on WhiteBIT and moving it in through the Portal bridge.
+- **What the relayer will send:**
+  - It calls only the Safe factory and the guard, with ABI-built calldata.
+  - Every send is simulated first, so a bad signature, a missing quorum or an empty vault costs nothing.
+- **Spending limits:** there's a fee cap (`RELAYER_MAX_FEE_GWEI`), a balance floor, a daily vault-creation cap and a daily per-vault execution cap.
+- **Failure handling:**
+  - Transactions are journaled (fsync) before broadcast and are never resent automatically.
+  - A leaked relayer key can only spend WBT. It cannot move vault funds without the owners' signatures *and* a verifier attestation.
+
+### Tests
+
+- `forge test --root contracts`: 12 guard tests on the canonical Safe bytecode.
+- `npm test`: unit tests plus the existing API flow.
+- `npm run test:whitechain`: the production server against a local anvil chain (id 1874) with canonical Safe bytecode and mock USDT. It covers:
+  - gasless vault creation and the vendor invoice
+  - wrong object, presence or key, each rejected at zero cost
+  - the guard blocking un-attested execution
+  - the majority payout with a USDT gas refund
+  - the signed webhook and the CSV export
+  - separate sessions never combining
+
+No testnet funds are spent by tests.
+
+### Current limitations (honest)
+
+- **Simulated checks:** object matching and the ultrasonic presence check are **simulated providers** in this repo.
+  - The real implementations plug into `ObjectMatchingProvider` and `PresenceSessionProvider` (`lib/integrations`).
+  - The UI emits `tichori:presence-emit` and calls `window.tichoriPresence.listen()` when present.
+  - Frequency matching alone does not prove proximity: relay and replay must be handled by the real provider.
+- **Trusted verifier:** the verifier is a trusted Tichori server key. The guard enforces that its attestation exists and matches, but cannot itself prove where anyone was.
+- **No authentication yet:** the API is still unauthenticated (identity IDs are demo selectors). Bind to localhost; a phone/camera/mic demo needs an HTTPS tunnel and deliberate exposure.
+- **Login:** it still asks for the public address. The identity key is unlocked with the passphrase for signing and kept in tab memory only.
+- **Single instance:** this is a single-instance server, with one relayer key and one data directory.
 
 ## Reusable API and integration hooks
 
@@ -22,11 +117,11 @@ Requires Node.js 22.20+ and a persistent writable filesystem. Bind the demo to l
 6. For existing SQLite data, stop the app and run `npm run arkiv:migrate` **before the first signup**. It encrypts existing records, verifies receipt and exact state readback, preserves IDs and invitations, and leaves `data/vault.sqlite` untouched. Migration refuses to overwrite existing Arkiv state. Invalid legacy relations or duplicate codes fail validation for explicit repair.
 7. Run `npm run dev -- --hostname 127.0.0.1` and open http://localhost:3000.
 
-Without a legacy database, the first valid signup creates the Arkiv entity. Signup generates a new EVM private key and public address in the browser. Choose a unique passphrase of at least 12 characters and back it up privately: the browser derives an AES-256-GCM key using PBKDF2-SHA256 (600,000 iterations and a random salt), encrypts the private key, and sends only the encrypted envelope and public address to the server. The passphrase and plaintext identity key are never sent to the API. The envelope is additionally protected by the server-side Arkiv aggregate encryption. The address is shown on the vaults page. Login is read-only and checks the passphrase locally against the encrypted key. The server still does not authenticate or authorize requests; the object description is a simulation, and access to the local API permits switching demo identities. Use a strong passphrase: anyone with the encrypted envelope can attempt offline guesses. If the passphrase is lost, the key cannot be recovered. The browser currently has no key export or signing integration: the generated identity address is separate from the connected wallet used for Safe deployment and the Safe app. For a new Safe vault, select Create vault, add the other signer wallet addresses, connect a creator wallet on Base Sepolia with test ETH, and approve deployment in that wallet. The connected creator is included; the threshold is a strict majority. The server verifies the mined Safe factory transaction, initialization, creation event, owners and threshold before storing its address in Arkiv. The vault page reads its ETH balance and current signer configuration from Base Sepolia and lets you copy the verified address. Use Safe for on-chain transaction signing and execution. The Listen button opens the Safe transaction queue; it does not use audio.
+Without a legacy database, the first valid signup creates the Arkiv entity. Signup generates a new EVM private key and public address in the browser. Choose a unique passphrase of at least 12 characters and back it up privately: the browser derives an AES-256-GCM key using PBKDF2-SHA256 (600,000 iterations and a random salt), encrypts the private key, and sends only the encrypted envelope and public address to the server. The passphrase and plaintext identity key are never sent to the API. The envelope is additionally protected by the server-side Arkiv aggregate encryption. The address is shown on the vaults page. Login is read-only and checks the passphrase locally against the encrypted key. The server still does not authenticate or authorize requests; the object description is a simulation, and access to the local API permits switching demo identities. Use a strong passphrase: anyone with the encrypted envelope can attempt offline guesses. If the passphrase is lost, the key cannot be recovered. There is no key export. On Whitechain vaults the identity key is the Safe signer: it signs approvals in the browser after a local unlock and is kept in tab memory only. Create vault deploys a presence-guarded Safe on Whitechain Sepolia through the relayer (no wallet or gas), with your identity address and the other signers' Tichori addresses as owners and a strict-majority threshold. The relayer verifies the deployment, owners, threshold, guard and verifier on-chain before the vault is stored in Arkiv; see the Whitechain section above. Vaults created earlier on Base Sepolia keep their previous behavior: MetaMask deployment, ETH balance, and transactions in the Safe app.
 
 Deployment progress is kept in browser local storage. If deployment succeeded but saving to Arkiv failed, use Resume deployment. If the wallet submission outcome is unknown, enter the existing transaction hash from the wallet; the app will verify it rather than deploy again. Preserve browser data until registration succeeds. If the wallet transaction reverted, reconcile it before attempting a new deployment.
 
-Existing demo vaults retain their old behavior and have no fund-holding address. Their transactions and balances remain simulations. Stored versions 1 and 2 are explicitly migrated to version 3 when read; a subsequent authorized write persists the upgraded representation. Legacy identifiers that are not EVM addresses remain preserved as legacy identifiers, without an invented address. Existing records have no generated key or passphrase, so they cannot log in through the new flow; their vault records and relationships are retained. There is no automatic identity reassignment or migration UI. Writes wait for a successful receipt and matching fresh Arkiv query before returning success. Group codes, object descriptions and encrypted private-key envelopes are omitted from the general API state. Login returns the requested identity’s encrypted envelope for browser-side unlocking; it is not access-controlled.
+Existing demo vaults retain their old behavior and have no fund-holding address. Their transactions and balances remain simulations. Stored versions 1 and 2 are explicitly migrated to version 3, and version 3 to version 4 (which adds empty Whitechain proposal and invoice collections), when read; a subsequent authorized write persists the upgraded representation. Legacy identifiers that are not EVM addresses remain preserved as legacy identifiers, without an invented address. Existing records have no generated key or passphrase, so they cannot log in through the new flow; their vault records and relationships are retained. There is no automatic identity reassignment or migration UI. Writes wait for a successful receipt and matching fresh Arkiv query before returning success. Group codes, object descriptions and encrypted private-key envelopes are omitted from the general API state. Login returns the requested identity’s encrypted envelope for browser-side unlocking; it is not access-controlled.
 
 ## Storage design and limits
 

@@ -12,6 +12,13 @@ Use Node.js 22.20 or later, then `npm install`. Configure server-only Arkiv cred
 - `app/globals.css`: shared visual system and responsive layouts.
 - `app/api/[...path]/route.ts`: mock HTTP API and validation. `GET /api/state` returns `{ wallets, groups, transactions }`. POST actions are `signup`, `login`, `groups`, `transactions`, `approve`, and `register-safe`; `GET /api/balance` reads a registered Safe’s current Base Sepolia ETH balance and signers; successful writes return the same state. Validation errors return `{ error }` with status 400; storage failures return status 503. Mutation idempotency keys retain the last 100 successful operations.
 - `lib/api/service.ts` and `lib/api/domain.ts`: shared orchestration, provider hooks and server-calculated workflow presentation. `/api/v1/*` is the versioned integration scaffold; legacy routes use the same service. `lib/api/client.ts` is the frontend HTTP client. See `docs/API.md` for payloads and teammate handoff.
+- `lib/whitechain/` and `lib/api/treasury.ts`: Whitechain treasury.
+  - Contents: chain constants, EIP-712 SafeTx/attestation helpers, the pure treasury domain (proposals, invoices, CSV), derived inbox keys, and the server-only relayer.
+  - Relayer rules: it holds one key, fsyncs its journal before every broadcast, simulates first, never resends uncertain transactions, and calls only the Safe factory and `TichoriPresenceGuard`.
+  - Approval sessions: each approval checks the object, presence and the approver's own EIP-712 signature. Quorum counts only within one session.
+  - Endpoints are listed in `docs/API.md`, under "Whitechain treasury endpoints".
+- `contracts/`: Foundry project for `TichoriPresenceGuard` (Safe 1.4.1 guard requiring a co-presence attestation) and `TichoriSafeSetup` (installs guard + verifier at Safe creation). Tests etch the canonical Safe bytecode from `contracts/test/fixtures`. Run `forge test --root contracts`; `npm run test:whitechain` runs the server end-to-end on anvil (chain 1874).
+- `packages/tichori-invoices` and `examples/vendor-studio`: vendor SDK and a separate vendor app for the invoice inbox.
 - `lib/integrations/contracts.ts` and `lib/integrations/providers.ts`: replaceable server provider contracts and the current demo implementations. Real external-vault verification fails with 501 until configured. These hooks do not add authentication, application isolation or on-chain enforcement.
 - `lib/db.ts`: server-only Arkiv entrypoint. `lib/arkiv/store.ts` handles SDK queries, encrypted aggregate writes, exclusive signer lock, fee reservation, signed transaction journal and recovery. `lib/vault.ts` validates domain state and relational integrity. `scripts/arkiv.ts` handles read-only checks and explicit SQLite migration.
 - `data/`: generated local state, never commit it.
@@ -36,5 +43,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+Whitechain keys:
+- `WHITECHAIN_RELAYER_PRIVATE_KEY` and `TICHORI_VERIFIER_PRIVATE_KEY` are separate, server-only keys. Never reuse the Arkiv or deployer key.
+- Deployer keys stay in Foundry's encrypted keystore. Deploys and broadcasts run only in the user's own terminal, after explicit confirmation.
 
 Run `npm run build` before `npm test`; the integration test uses a local RPC fixture, throwaway signer and isolated durable journal directory with a production server. Tests do not spend testnet funds. Keep writes serialized across all local processes using the signer and shared persistent data directory. Do not expose this unauthenticated paid-write API publicly. Missing/expired/reset state and uncertain transactions must fail closed; never automatically recreate or resend them. Back up encryption keys privately. The 100,000-byte aggregate is intended only for the small prototype.
