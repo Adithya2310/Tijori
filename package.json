@@ -22,6 +22,7 @@
     "dev:phone:watch": "node scripts/dev-phone.mjs --watch"
   },
   "dependencies": {
+    "@anon-rpc/browser-harness": "^0.4.0",
     "@arkiv-network/sdk": "1.0.1",
     "@fontsource/dm-sans": "^5.3.0",
     "@fontsource/dm-serif-display": "^5.3.0",
