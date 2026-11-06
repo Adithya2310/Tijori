@@ -316,13 +316,13 @@ export async function treasuryExport(vaultId: string | null, identityId: string 
  });
 }
 export async function relayerStatus() {
- if (!isTreasuryConfigured()) return { configured: false };
+ if (!isTreasuryConfigured()) return { configured: false as const };
  const config = treasuryConfig(), client = whitechainClient();
  const journal = await withTreasury(async ctx => structuredClone(ctx.journal) as TreasuryJournal);
  const [balance, usdt] = await Promise.all([client.getBalance({ address: config.relayer.address }), client.readContract({ address: WHITECHAIN_USDT, abi: erc20Abi, functionName: 'balanceOf', args: [config.relayer.address] }).catch(() => 0n)]);
  const avg = journal.sent ? BigInt(journal.gasWei) / BigInt(journal.sent) : 1_500_000_000_000_000n;
  return {
-  configured: true, address: config.relayer.address, guard: config.guard, verifier: config.verifier.address,
+  configured: true as const, address: config.relayer.address, guard: config.guard, verifier: config.verifier.address,
   balanceWbt: formatEther(balance), usdtBalance: formatUsdt(usdt), sponsoredTransactions: journal.sent, gasSpentWbt: formatEther(BigInt(journal.gasWei)),
   averageCostWbt: formatEther(avg), transactionsLeft: Number(balance / (avg || 1n)), refundsReceivedUsdt: formatUsdt(journal.refundsMicroUsdt),
   limits: { maxFeeGwei: config.maxFeeGwei, minBalanceWbt: formatEther(config.minRelayerWei), dailyVaultDeploys: config.dailyDeployCap, dailyExecutionsPerVault: config.dailyExecutionCapPerVault, gasRefundMicroUsdtPerGas: config.gasPriceMicroUsdt.toString() },
