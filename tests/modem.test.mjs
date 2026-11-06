@@ -26,6 +26,21 @@ Object.defineProperty(globalThis.navigator, 'mediaDevices', { configurable: true
   },
 } });
 
+// Measure actual waveform energy, so selecting ultrasound cannot silently keep
+// emitting the audible protocol while still passing a decode roundtrip.
+function bandEnergy(samples, minHz, maxHz) {
+  const size = 2048, start = Math.floor(samples.length / 2);
+  const window = Array.from({ length: size }, (_, i) => samples[start + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (size - 1))));
+  let energy = 0;
+  for (let bin = Math.ceil(minHz * size / 48000); bin <= Math.floor(maxHz * size / 48000); bin++) {
+    const coefficient = 2 * Math.cos(2 * Math.PI * bin / size);
+    let previous = 0, before = 0;
+    for (const sample of window) { const next = sample + coefficient * previous - before; before = previous; previous = next; }
+    energy += previous * previous + before * before - coefficient * previous * before;
+  }
+  return energy;
+}
+
 test('real WASM audible and ultrasound waveforms survive Web Audio byte conversions', async () => {
   const modem = await initModem();
   for (const ultrasound of [false, true]) {
@@ -33,6 +48,10 @@ test('real WASM audible and ultrasound waveforms survive Web Audio byte conversi
     assert.equal(lastBuffer.length / 48000, 1.3226666666666667);
     assert.ok(lastBuffer.some((sample) => sample !== 0));
     assert.ok(lastBuffer.every(Number.isFinite));
+    const audibleEnergy = bandEnergy(lastBuffer, 1500, 7000);
+    const ultrasoundEnergy = bandEnergy(lastBuffer, 14500, 20000);
+    assert.ok(ultrasound ? ultrasoundEnergy > audibleEnergy * 100 : audibleEnergy > ultrasoundEnergy * 100,
+      `Expected ${ultrasound ? 'ultrasound' : 'audible'} frequency band, got audible=${audibleEnergy}, ultrasound=${ultrasoundEnergy}`);
     let decoded = '', peak = 0;
     assert.equal(await startAcousticListener((value) => { decoded = value; }, (level) => { peak = Math.max(peak, level); }), true);
     assert.deepEqual(constraints.audio, { echoCancellation: false, autoGainControl: false, noiseSuppression: false });

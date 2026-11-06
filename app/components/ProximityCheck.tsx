@@ -13,6 +13,8 @@ async function api(groupId:string,walletId:string,body?:object,operationId?:stri
 }
 export default function ProximityCheck({group,walletId,storageMode}:{group:Group;walletId:string;storageMode?:'local'|'arkiv'}) {
  const headingId=useId();
+ const audioHintId=useId();
+ const [ultrasound,setUltrasound]=useState(false);
  const operationKey=`tichori-proximity:${group.id}:${walletId}`;
  const [session,setSession]=useState<Session|null>(null),[opened,setOpened]=useState(false),[mode,setMode]=useState<'idle'|'starting'|'permission'|'broadcasting'|'listening'>('idle'),[error,setError]=useState(''),[connectionError,setConnectionError]=useState(''),[level,setLevel]=useState(0),[now,setNow]=useState(()=>Date.now()),[audioReady,setAudioReady]=useState(false);
  const audioSession=useRef<string|null>(null),revision=useRef(0);
@@ -49,6 +51,7 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
   if(id)try{const result=await api(group.id,walletId,{action:'cancel',sessionId:id});setSession(result.session);sessionStorage.removeItem(operationKey);}catch(e){setError(e instanceof Error?e.message:'Could not end check. It expires automatically.');}
  }
  async function begin(kind:'host'|'listener',button:HTMLButtonElement) {
+  if(running.current)return;
   revision.current++;trigger.current=button;setOpened(true);setError('');setMode('starting');running.current=true;
   const attempt=++generation.current;
   const current=()=>attempt===generation.current;
@@ -68,7 +71,7 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
     const expires=result.session.expiresAt;
     setMode('broadcasting');
     while(current() && Date.now()<expires) {
-     await modem.current.playChallengeTone(result.nonce);
+     await modem.current.playChallengeTone(result.nonce,ultrasound);
      // Short silence between repeated acoustic frames.
      await new Promise(resolve=>setTimeout(resolve,500));
     }
@@ -98,12 +101,15 @@ export default function ProximityCheck({group,walletId,storageMode}:{group:Group
  return <div className="proximity-check">
   <p className="check-status" aria-live="polite">{active?`Acoustic check active · ${seconds}s left`:session?.status==='cancelled'?'Last check ended':session?'Last check expired':'Ready for an acoustic check'}</p>
   {session && session.matches.length>0 && <p className="check-status">{session.matches.length} of {group.members.length-1} other members matched</p>}
-  <div className="group-actions"><button disabled={(!!active && session?.hostId!==walletId) || mode!=='idle' || !audioReady} onClick={e=>void begin('host',e.currentTarget)}>{active&&session?.hostId===walletId?'Resume signal':'Send'} <Radio size={14}/></button><button disabled={!audioReady || !active || session?.hostId===walletId || !!ownMatch} onClick={e=>void begin('listener',e.currentTarget)}>{ownMatch&&active?'Matched':'Join check'} <AudioLines size={14}/></button></div>
+  <label className="object-consent"><input type="checkbox" role="switch" checked={ultrasound} disabled={opened} aria-describedby={audioHintId} onChange={e=>setUltrasound(e.target.checked)}/><span>Ultrasound broadcast {ultrasound?'on':'off'}</span></label>
+  <p className="form-hint" id={audioHintId}>{ultrasound?'Send uses high-frequency audio (about 15–19.5 kHz). Some people may still hear it; speaker and microphone support varies.':'Send uses an audible signal for easier testing.'} Listeners detect both modes automatically. Stop and close a check before switching modes. Use device speakers, without headphones.</p>
+  <div className="group-actions"><button disabled={(!!active && session?.hostId!==walletId) || mode!=='idle' || !audioReady} onClick={e=>void begin('host',e.currentTarget)}>{active&&session?.hostId===walletId?'Resume signal':'Send'} <Radio size={14}/></button><button disabled={mode!=='idle' || !audioReady || !active || session?.hostId===walletId || !!ownMatch} onClick={e=>void begin('listener',e.currentTarget)}>{ownMatch&&active?'Matched':'Join check'} <AudioLines size={14}/></button></div>
   {(error||connectionError)&&!opened&&<p className="error" role="alert">{error||connectionError}</p>}
   <dialog ref={dialog} className="modal proximity-dialog" aria-labelledby={headingId} onCancel={e=>{e.preventDefault();void close();}}>
    <button className="modal-close" onClick={()=>void close()} aria-label="Close acoustic check"><X size={19}/></button>
    <div className="modal-icon"><Radio/></div><div className="section-kicker">GROUP PROXIMITY</div><h2 id={headingId}>{group.name}</h2>
-   <p className="modal-desc">{session?.hostId===walletId?'Your device plays an audible signal. Ask other members to open this vault and tap Join check.':'Listen near the broadcasting device. Keep this screen open and allow microphone access.'}</p>
+   <p className="modal-desc">{session?.hostId===walletId?`Your device plays ${ultrasound?'a high-frequency ultrasound':'an audible'} signal. Ask other members to open this vault and tap Join check.`:'Listen near the broadcasting device. Audible and ultrasound signals are detected automatically. Keep this screen open and allow microphone access.'}</p>
+   <p className="check-status">{session?.hostId===walletId?`Broadcast mode: ${ultrasound?'Ultrasound · about 15–19.5 kHz':'Audible'}`:'Receive mode: automatic · audible + ultrasound'}</p>
    <div className="dial-wrap"><div className="dial"><div className="dial-inner"><AudioLines size={27}/><strong className="dial-listening">{ownMatch?'Signal matched':ended?'Check ended':mode==='starting'?'Starting…':mode==='permission'?'Allow microphone':mode==='broadcasting'?'Broadcasting':mode==='listening'?'Listening':'Ready'}</strong><small>{active?`${seconds}s remaining`:'ACOUSTIC CHECK'}</small></div></div></div>
    {mode==='listening'&&!ended&&<label>Microphone level<meter min="0" max="100" value={level} aria-label="Microphone level"/></label>}
    <div className="signal-banner"><Radio size={20}/><div><strong>Acoustic matching only · No transfers</strong><small>Audio stays on your device. Decoded challenges and matches are stored in {storageMode==='local'?'the laptop’s encrypted local database. No Arkiv writes are made.':'encrypted Arkiv state. Public storage metadata remains visible.'} A match can be replayed or relayed and does not guarantee physical proximity or verify identity.</small></div></div>
