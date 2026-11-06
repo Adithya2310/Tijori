@@ -21,6 +21,6 @@ export default async function InvoiceReceipt({ params }: { params: Promise<{ id:
    {invoice.externalId && <div><span>Reference</span><strong>{invoice.externalId}</strong></div>}
    {invoice.payment && <><div><span>Paid at</span><strong>{new Date(invoice.payment.paidAt!).toUTCString()}</strong></div><div><span>Approved together by</span><strong>{invoice.payment.approvals} signers in one session</strong></div><div><span>Transaction</span><strong><a href={invoice.payment.explorerUrl} target="_blank" rel="noreferrer">{invoice.payment.txHash.slice(0, 18)}…</a></strong></div></>}
   </div>
-  <p className="form-hint">Paid from the treasury Safe {invoice.vault.address} on Whitechain Sepolia. Anyone can verify the USDT transfer and the co-presence attestation on the explorer. Demo only: test tokens, no real funds.</p>
+  <p className="form-hint">{paid ? `Paid from the treasury Safe ${invoice.vault.address} on Whitechain Sepolia. Anyone can verify the USDT transfer and the co-presence attestation on the explorer.` : `Billed to the treasury Safe ${invoice.vault.address} on Whitechain Sepolia. It is paid once a majority of its signers approve together in one session.`} Demo only: test tokens, no real funds.</p>
  </div></main>;
 }
