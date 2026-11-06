@@ -1,0 +1,331 @@
+import 'server-only';
+import { createHash, randomUUID } from 'node:crypto';
+import { after } from 'next/server';
+import { decodeEventLog, encodeFunctionData, formatEther, getAddress, hashTypedData, isAddress, recoverTypedDataAddress, zeroAddress, type Address, type Hex, type TransactionReceipt } from 'viem';
+import { withArkiv, StorageError } from '../db.ts';
+import { applyAction, VaultError, type Vault } from '../vault.ts';
+import { providers, presenceProvider } from '../integrations/providers.ts';
+import { IntegrationUnavailableError } from '../integrations/contracts.ts';
+import { applicationState } from './domain.ts';
+import { WHITECHAIN_CHAIN_ID, WHITECHAIN_USDT, explorerTx, formatUsdt } from '../whitechain/chain.ts';
+import { isTreasuryConfigured, treasuryConfig, whitechainClient } from '../whitechain/config.ts';
+import { readWhitechainSafe } from '../whitechain/safe.ts';
+import { attestationTypedData, erc20Abi, guardAbi, idToBytes32, packSignatures, safeAbi, safeTxTypedData, sortAddresses, usdtTransferData, type SafeTx } from '../whitechain/safe-tx.ts';
+import { bumpDaily, deployGuardedSafe, reconcilePending, relay, withTreasury, type Session, type TreasuryJournal } from '../whitechain/relayer.ts';
+import { createInvoice, createProposal, invoiceView, memberWallet, recordExecution, remindInvoice, treasuryCsv, whitechainVault } from '../whitechain/domain.ts';
+import { deriveMasterKey, inboxKeyFor, signWebhook, verifyInboxKey, webhookSecretFor } from '../whitechain/keys.ts';
+
+const str = (x: unknown, max = 200) => (typeof x === 'string' ? x.trim() : '').slice(0, max);
+type Ctx = Parameters<Parameters<typeof withTreasury>[0]>[0];
+
+function masterKey() {
+ const secret = process.env.TICHORI_API_MASTER_KEY?.trim() || process.env.ARKIV_STATE_ENCRYPTION_KEY?.trim();
+ if (!secret || !/^[\da-f]{64}$/i.test(secret)) throw new IntegrationUnavailableError('Set TICHORI_API_MASTER_KEY (32 bytes hex) to issue vendor inbox keys.');
+ return deriveMasterKey(secret);
+}
+const operationId = (value: string | null | undefined) => {
+ const id = value || randomUUID();
+ if (!/^[\w-]{1,100}$/.test(id)) throw new VaultError('Invalid operation ID.');
+ return id;
+};
+const digestOf = (action: string, body: unknown) => createHash('sha256').update(JSON.stringify([action, body])).digest('hex');
+
+/** Durable, idempotent aggregate mutation, mirroring lib/api/service.ts mutate(). */
+async function arkivMutation<T>(action: string, body: unknown, opId: string, identityId: string, change: (vault: Vault) => T, result: (vault: Vault, value: T | undefined) => unknown) {
+ const digest = digestOf(action, body);
+ return withArkiv(async store => {
+  const previous = await store.read(), vault = previous.vault;
+  const saved = vault.operations.find(o => o.id === opId);
+  if (saved && saved.digest !== digest) throw new VaultError('This operation ID was already used with different input.');
+  let value: T | undefined;
+  if (!saved) {
+   value = change(vault);
+   vault.operations.push({ id: opId, digest, identityId });
+   vault.operations = vault.operations.slice(-100);
+   await store.write(vault, previous);
+  }
+  return result(vault, value);
+ });
+}
+
+export function treasuryCapabilities() {
+ let guard: string | null = null;
+ try { guard = treasuryConfig().guard; } catch { /* unconfigured */ }
+ return { chainId: WHITECHAIN_CHAIN_ID, asset: { symbol: 'USDT', address: WHITECHAIN_USDT, decimals: 6 }, configured: isTreasuryConfigured(), guard, presence: { provider: presenceProvider.id, mode: presenceProvider.mode }, execution: 'co-present-attested-relayer' };
+}
+
+// ---------- Vault creation (gasless, guarded) ----------
+export async function createWhitechainVault(body: Record<string, unknown>, opHeader: string | null) {
+ const name = str(body.name, 120), creatorId = str(body.creatorId, 100);
+ if (!name) throw new VaultError('Enter a vault name of at most 120 characters.');
+ treasuryConfig();
+ const opId = operationId(opHeader);
+ const creator = await withArkiv(async store => (await store.read()).vault.wallets.find(w => w.id === creatorId && w.address && w.object_name && w.keyEnvelope));
+ if (!creator) throw new VaultError('Sign in with an encrypted identity to create a vault.');
+ const members = Array.isArray(body.addresses) ? body.addresses.map(a => str(a, 100)) : [];
+ if (!members.length || members.length > 31 || !members.every(a => isAddress(a))) throw new VaultError('Add 1-31 valid signer addresses.');
+ const owners = [getAddress(creator.address!), ...members.map(a => getAddress(a))];
+ if (new Set(owners.map(o => o.toLowerCase())).size !== owners.length) throw new VaultError('Each signer address must be unique and different from yours.');
+ const already = await withArkiv(async store => (await store.read()).vault.operations.find(o => o.id === opId));
+ if (already && already.digest !== digestOf('whitechain-vault', { name, creatorId, owners })) throw new VaultError('This operation ID was already used with different input.');
+ const deployed = already ? null : await deployGuardedSafe(opId, owners);
+ return arkivMutation('whitechain-vault', { name, creatorId, owners }, opId, creatorId, vault => {
+  const safe = { address: deployed!.address, chainId: WHITECHAIN_CHAIN_ID as 1874, owners: deployed!.owners, threshold: deployed!.threshold, deploymentTxHash: deployed!.deploymentTxHash, saltNonce: deployed!.saltNonce, guard: deployed!.guard };
+  applyAction(vault, 'register-safe', { name, creatorId, safe });
+ }, vault => ({ ...applicationState(vault, creatorId), identityId: creatorId, vaultId: vault.groups.find(g => g.safe && g.safe.chainId === 1874 && g.safe.owners.join() === owners.join())?.id }));
+}
+
+// ---------- Proposals ----------
+export async function proposePayout(body: Record<string, unknown>, opHeader: string | null) {
+ const opId = operationId(opHeader);
+ const proposerId = str(body.proposerId, 100);
+ return arkivMutation('proposal', body, opId, proposerId, vault => createProposal(vault, body).id, (vault, id) => ({ ...applicationState(vault, proposerId), identityId: proposerId, proposalId: id }));
+}
+
+// ---------- Approval sessions ----------
+const safeTxOf = (s: Session): SafeTx => ({ to: s.safeTx.to, value: BigInt(s.safeTx.value), data: s.safeTx.data, operation: 0, safeTxGas: BigInt(s.safeTx.safeTxGas), baseGas: BigInt(s.safeTx.baseGas), gasPrice: BigInt(s.safeTx.gasPrice), gasToken: s.safeTx.gasToken, refundReceiver: s.safeTx.refundReceiver, nonce: BigInt(s.safeTx.nonce) });
+function sessionView(session: Session, vault: Vault, identityId?: string) {
+ const proposal = vault.proposals.find(p => p.id === session.proposalId);
+ const invoice = vault.invoices.find(i => i.id === proposal?.invoice_id);
+ const name = (id: string) => vault.wallets.find(w => w.id === id)?.name ?? 'Signer';
+ const maxFee = BigInt(session.safeTx.gasPrice) * (BigInt(session.safeTx.safeTxGas) + BigInt(session.safeTx.baseGas));
+ return {
+  id: session.id, status: session.status, vaultId: session.vaultId, vaultName: vault.groups.find(g => g.id === session.vaultId)?.name ?? '', safe: session.safe, chainId: WHITECHAIN_CHAIN_ID,
+  proposal: proposal ? { id: proposal.id, to: proposal.to, amount: formatUsdt(proposal.amount), note: proposal.note, vendor: invoice?.vendor_name ?? null } : null,
+  initiator: name(session.initiatorId), threshold: session.threshold, approvals: session.approvals.map(a => ({ name: name(a.walletId), at: a.at })),
+  approvedByMe: !!identityId && session.approvals.some(a => a.walletId === identityId), expiresAt: session.expiresAt,
+  safeTx: session.safeTx, safeTxHash: session.safeTxHash, maxNetworkFeeUsdt: formatUsdt(maxFee), txHash: session.txHash ?? null, explorerUrl: session.txHash ? explorerTx(session.txHash) : null,
+  presence: { provider: session.presence.provider, mode: session.presence.mode, challengeId: session.challenge.challengeId, ...(session.presence.mode === 'simulated' ? { simulatedCode: session.challenge.code } : {}) },
+  error: session.error ?? null,
+ };
+}
+
+export async function startApprovalSession(body: Record<string, unknown>) {
+ const proposalId = str(body.proposalId, 100), initiatorId = str(body.initiatorId, 100);
+ return withTreasury(async ctx => {
+  await reconcileSessions(ctx);
+  const vault = await withArkiv(async store => (await store.read()).vault);
+  const proposal = vault.proposals.find(p => p.id === proposalId);
+  if (!proposal || proposal.status !== 'pending') throw new VaultError('This proposal is not pending.');
+  const { group, wallet } = memberWallet(vault, proposal.group_id, initiatorId);
+  const { config } = ctx, client = whitechainClient();
+  const live = await readWhitechainSafe(group.safe!.address);
+  if (live.guard !== config.guard) throw new VaultError('This vault is not protected by the configured presence guard.');
+  const verifier = await client.readContract({ address: config.guard, abi: guardAbi, functionName: 'verifier', args: [live.address] });
+  if (getAddress(verifier) !== config.verifier.address) throw new VaultError('This vault trusts a different Tichori verifier.');
+  if (!wallet.address || !live.owners.some(o => o.toLowerCase() === wallet.address)) throw new VaultError('Only current vault signers can start an approval session.');
+  const amount = BigInt(proposal.amount), data = usdtTransferData(proposal.to as Address, amount);
+  let inner: bigint;
+  try { inner = await client.estimateGas({ account: live.address, to: WHITECHAIN_USDT, data }); }
+  catch { throw new VaultError('The vault does not hold enough USDT for this payment.'); }
+  const gasPrice = config.gasPriceMicroUsdt;
+  const safeTx: SafeTx = { to: WHITECHAIN_USDT, value: 0n, data, operation: 0, safeTxGas: inner * 13n / 10n + 10_000n, baseGas: config.baseGas, gasPrice, gasToken: gasPrice > 0n ? WHITECHAIN_USDT : zeroAddress, refundReceiver: gasPrice > 0n ? config.relayer.address : zeroAddress, nonce: live.nonce };
+  if (live.balanceUsdt < amount + gasPrice * (safeTx.safeTxGas + safeTx.baseGas)) throw new VaultError('The vault does not hold enough USDT for this payment and its network fee.');
+  const safeTxHash = hashTypedData(safeTxTypedData(WHITECHAIN_CHAIN_ID, live.address, safeTx));
+  const onchain = await client.readContract({ address: live.address, abi: safeAbi, functionName: 'getTransactionHash', args: [safeTx.to, safeTx.value, safeTx.data, safeTx.operation, safeTx.safeTxGas, safeTx.baseGas, safeTx.gasPrice, safeTx.gasToken, safeTx.refundReceiver, safeTx.nonce] });
+  if (onchain !== safeTxHash) throw new StorageError('Safe transaction hash mismatch. No session was created.');
+  for (const other of Object.values(ctx.journal.sessions)) if (other.vaultId === group.id && other.status === 'open') other.status = 'superseded';
+  const id = randomUUID(), now = Date.now(), expiresAt = new Date(now + config.sessionSeconds * 1000).toISOString();
+  const challenge = await presenceProvider.createChallenge({ sessionId: id, vaultId: group.id, safeTxHash, expiresAt });
+  const session: Session = { id, proposalId, vaultId: group.id, safe: live.address, threshold: live.threshold, owners: live.owners, initiatorId, safeTx: { to: safeTx.to, value: '0', data, operation: 0, safeTxGas: safeTx.safeTxGas.toString(), baseGas: safeTx.baseGas.toString(), gasPrice: gasPrice.toString(), gasToken: safeTx.gasToken, refundReceiver: safeTx.refundReceiver, nonce: live.nonce.toString() }, safeTxHash, challenge, presence: { provider: presenceProvider.id, mode: presenceProvider.mode }, createdAt: new Date(now).toISOString(), expiresAt, approvals: [], status: 'open' };
+  ctx.journal.sessions[id] = session; await ctx.save();
+  // Only the initiator receives the code to emit.
+  return { session: sessionView(session, vault, initiatorId), emit: { challengeId: challenge.challengeId, code: challenge.code, expiresAt } };
+ });
+}
+
+export async function listApprovalSessions(identityId: string) {
+ if (!isTreasuryConfigured()) return { sessions: [] };
+ return withTreasury(async ctx => {
+  await reconcileSessions(ctx);
+  const vault = await withArkiv(async store => (await store.read()).vault);
+  if (!vault.wallets.some(w => w.id === identityId)) throw new VaultError('Unknown demo identity.');
+  const recent = Date.now() - 15 * 60_000;
+  const sessions = Object.values(ctx.journal.sessions).filter(s => vault.groups.find(g => g.id === s.vaultId)?.memberIds.includes(identityId) && (s.status === 'open' || s.status === 'executing' || s.status === 'submitted' || Date.parse(s.createdAt) > recent) && s.status !== 'superseded');
+  return { sessions: sessions.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(s => sessionView(s, vault, identityId)) };
+ });
+}
+
+export async function approveInSession(body: Record<string, unknown>) {
+ const sessionId = str(body.sessionId, 100), walletId = str(body.walletId, 100), signature = str(body.signature, 300) as Hex;
+ return withTreasury(async ctx => {
+  await reconcileSessions(ctx);
+  const session = ctx.journal.sessions[sessionId];
+  if (!session || session.status !== 'open') throw new VaultError('This approval session is not open.');
+  if (Date.parse(session.expiresAt) <= Date.now()) { session.status = 'expired'; await ctx.save(); throw new VaultError('This approval session has expired. Start a new one together.'); }
+  const vault = await withArkiv(async store => (await store.read()).vault);
+  const proposal = vault.proposals.find(p => p.id === session.proposalId);
+  if (!proposal || proposal.status !== 'pending') throw new VaultError('This proposal is no longer pending.');
+  const { wallet } = memberWallet(vault, session.vaultId, walletId);
+  if (!wallet.address || !wallet.object_name) throw new VaultError('Only enrolled identities can approve.');
+  if (session.approvals.some(a => a.walletId === walletId)) throw new VaultError('You already approved in this session.');
+  // 1. Personal object, verified fresh for this approval.
+  const object = await providers.objectMatching.verify({ identityId: wallet.id, address: wallet.address, objectName: wallet.object_name }, { objectName: str(body.objectName, 500), evidence: evidenceOf(body.objectEvidence) });
+  if (!object.accepted) throw new VaultError('Your personal object did not match.');
+  // 2. Physically present in this session (same room, same time window).
+  const presence = await presenceProvider.verify({ sessionId, vaultId: session.vaultId, identityId: wallet.id, safeTxHash: session.safeTxHash, challenge: session.challenge }, evidenceOf(body.evidence));
+  if (!presence.accepted) throw new VaultError('Presence was not verified for this session. Stay together and listen again.');
+  // 3. The approver's own key signed exactly this Safe transaction.
+  if (!/^0x[\da-f]{130}$/i.test(signature)) throw new VaultError('A 65-byte signature is required.');
+  let signer: Address;
+  try { signer = await recoverTypedDataAddress({ ...safeTxTypedData(WHITECHAIN_CHAIN_ID, session.safe, safeTxOf(session)), signature }); }
+  catch { throw new VaultError('The approval signature is invalid.'); }
+  if (signer.toLowerCase() !== wallet.address || !session.owners.some(o => o.toLowerCase() === wallet.address)) throw new VaultError('The approval was not signed by your vault key.');
+  session.approvals.push({ walletId, address: getAddress(signer), signature, at: new Date().toISOString(), objectMode: object.mode, presenceMode: presence.mode });
+  await ctx.save();
+  if (session.approvals.length >= session.threshold) await finalize(ctx, session);
+  const latest = await withArkiv(async store => (await store.read()).vault);
+  return { session: sessionView(session, latest, walletId), ...applicationState(latest, walletId) };
+ });
+}
+function evidenceOf(value: unknown) {
+ if (!value || typeof value !== 'object') return undefined;
+ const e = value as Record<string, unknown>;
+ return typeof e.reference === 'string' && typeof e.challengeId === 'string' && e.reference.length <= 256 && e.challengeId.length <= 256 ? { reference: e.reference, challengeId: e.challengeId } : undefined;
+}
+
+async function finalize(ctx: Ctx, session: Session) {
+ const { config } = ctx;
+ bumpDaily(ctx.journal, `exec:${session.safe}`, config.dailyExecutionCapPerVault, 'This vault reached its daily relayed execution limit.');
+ session.status = 'executing'; await ctx.save();
+ const approvers = sortAddresses(session.approvals.map(a => a.address));
+ const attestation = { safe: session.safe, safeTxHash: session.safeTxHash, sessionId: idToBytes32(session.id), approvers, ref: idToBytes32(session.proposalId), expiresAt: BigInt(Math.floor(Date.parse(session.expiresAt) / 1000) + 300) };
+ const verifierSignature = await config.verifier.signTypedData(attestationTypedData(WHITECHAIN_CHAIN_ID, config.guard, attestation));
+ const t = safeTxOf(session);
+ const data = encodeFunctionData({ abi: guardAbi, functionName: 'executeWithAttestation', args: [session.safe, { to: t.to, value: t.value, data: t.data, operation: t.operation, safeTxGas: t.safeTxGas, baseGas: t.baseGas, gasPrice: t.gasPrice, gasToken: t.gasToken, refundReceiver: t.refundReceiver }, packSignatures(session.approvals.map(a => ({ signer: a.address, signature: a.signature }))), attestation, verifierSignature] });
+ let receipt: TransactionReceipt;
+ try { receipt = await relay(ctx, { to: config.guard, data, purpose: 'execute', ref: session.id }); }
+ catch (e) {
+  if (ctx.journal.pending?.ref === session.id) { session.status = 'submitted'; session.txHash = ctx.journal.pending.hash; await ctx.save(); return; }
+  session.status = 'failed'; session.error = e instanceof Error ? e.message : 'Execution failed.'; await ctx.save(); return;
+ }
+ await applyReceipt(ctx, session, receipt);
+}
+async function applyReceipt(ctx: Ctx, session: Session, receipt: TransactionReceipt) {
+ let success = false, payment = 0n;
+ for (const log of receipt.logs) {
+  try {
+   if (getAddress(log.address) === session.safe) { const e = decodeEventLog({ abi: safeAbi, data: log.data, topics: log.topics }); if (e.eventName === 'ExecutionSuccess' || e.eventName === 'ExecutionFailure') payment = e.args.payment; }
+   if (getAddress(log.address) === ctx.config.guard) { const e = decodeEventLog({ abi: guardAbi, data: log.data, topics: log.topics }); if (e.eventName === 'CoPresentExecution') success = e.args.success; }
+  } catch { /* unrelated log */ }
+ }
+ session.txHash = receipt.transactionHash; session.gasRefund = payment.toString();
+ session.status = receipt.status === 'success' && success ? 'executed' : 'failed';
+ if (session.safeTx.gasToken !== zeroAddress) ctx.journal.refundsMicroUsdt = (BigInt(ctx.journal.refundsMicroUsdt) + payment).toString();
+ await ctx.save();
+ await recordSession(ctx, session);
+}
+async function recordSession(ctx: Ctx, session: Session) {
+ if (session.recorded || !session.txHash || (session.status !== 'executed' && session.status !== 'failed')) return;
+ try {
+  const webhook = await withArkiv(async store => {
+   const previous = await store.read(), vault = previous.vault;
+   const approverIds = session.approvals.map(a => a.walletId);
+   const proposal = recordExecution(vault, { proposalId: session.proposalId, success: session.status === 'executed', txHash: session.txHash!, sessionId: session.id, approverIds, safeTxHash: session.safeTxHash, gasRefund: BigInt(session.gasRefund ?? '0') });
+   await store.write(vault, previous);
+   const invoice = vault.invoices.find(i => i.id === proposal.invoice_id && i.status === 'paid');
+   return invoice?.webhook_url ? { url: invoice.webhook_url, vaultId: invoice.group_id, payload: { type: 'invoice.paid', invoice: invoiceView(vault, invoice) } } : null;
+  });
+  session.recorded = true; await ctx.save();
+  if (webhook) scheduleWebhook(webhook.url, webhook.vaultId, webhook.payload);
+ } catch { /* Arkiv unavailable: the confirmed execution stays journaled and is recorded on the next reconcile. */ }
+}
+async function reconcileSessions(ctx: Ctx) {
+ const pendingReceipt = await reconcilePending(ctx.journal, ctx.save).catch(() => null);
+ for (const session of Object.values(ctx.journal.sessions)) {
+  if (session.status === 'open' && Date.parse(session.expiresAt) <= Date.now()) { session.status = 'expired'; await ctx.save(); }
+  if (session.status === 'submitted' && session.txHash) {
+   const receipt = pendingReceipt?.transactionHash === session.txHash ? pendingReceipt : await whitechainClient().getTransactionReceipt({ hash: session.txHash }).catch(() => null);
+   if (receipt) await applyReceipt(ctx, session, receipt);
+  }
+  if (!session.recorded) await recordSession(ctx, session);
+  if (Date.now() - Date.parse(session.createdAt) > 2 * 86_400_000 && session.status !== 'submitted') delete ctx.journal.sessions[session.id];
+ }
+}
+
+// ---------- Vendor invoice inbox (Operate) ----------
+export async function issueInboxKey(body: Record<string, unknown>) {
+ const vaultId = str(body.vaultId, 100), identityId = str(body.identityId, 100), master = masterKey();
+ await withArkiv(async store => { memberWallet((await store.read()).vault, vaultId, identityId); });
+ return { inboxKey: inboxKeyFor(master, vaultId), webhookSecret: webhookSecretFor(master, vaultId), endpoint: '/api/v1/invoices' };
+}
+function inboxVault(authorization: string | null) {
+ const vaultId = verifyInboxKey(masterKey(), authorization?.replace(/^Bearer\s+/i, '').trim());
+ if (!vaultId) throw new AuthError('A valid vault inbox key is required.');
+ return vaultId;
+}
+export class AuthError extends Error {}
+const allowPrivateWebhooks = () => process.env.TICHORI_WEBHOOK_ALLOW_PRIVATE === '1';
+export async function vendorCreateInvoice(authorization: string | null, body: Record<string, unknown>) {
+ const vaultId = inboxVault(authorization);
+ return withArkiv(async store => {
+  const previous = await store.read(), vault = previous.vault;
+  const { invoice, created } = createInvoice(vault, vaultId, body, { allowPrivateWebhooks: allowPrivateWebhooks() });
+  if (created) await store.write(vault, previous);
+  return { invoice: invoiceView(vault, invoice), created, receiptPath: `/invoice/${invoice.id}` };
+ });
+}
+export async function vendorGetInvoice(authorization: string | null, id: string | null) {
+ const vaultId = inboxVault(authorization);
+ return withArkiv(async store => {
+  const vault = (await store.read()).vault;
+  const invoice = vault.invoices.find(i => i.id === id && i.group_id === vaultId);
+  if (!invoice) throw new VaultError('Unknown invoice.');
+  return { invoice: invoiceView(vault, invoice), receiptPath: `/invoice/${invoice.id}` };
+ });
+}
+export async function vendorRemind(authorization: string | null, body: Record<string, unknown>) {
+ const vaultId = inboxVault(authorization);
+ return withArkiv(async store => {
+  const previous = await store.read(), vault = previous.vault;
+  const invoice = remindInvoice(vault, vaultId, str(body.id, 100));
+  await store.write(vault, previous);
+  return { invoice: invoiceView(vault, invoice) };
+ });
+}
+/** Public receipt: invoice IDs are unguessable capability URLs. */
+export async function invoiceReceipt(id: string) {
+ return withArkiv(async store => {
+  const vault = (await store.read()).vault;
+  const invoice = vault.invoices.find(i => i.id === id);
+  return invoice ? invoiceView(vault, invoice) : null;
+ });
+}
+function scheduleWebhook(url: string, vaultId: string, payload: unknown) {
+ let secret: string;
+ try { secret = webhookSecretFor(masterKey(), vaultId); } catch { return; }
+ const body = JSON.stringify(payload);
+ const deliver = async () => {
+  for (const delay of [0, 2_000, 10_000]) {
+   if (delay) await new Promise(r => setTimeout(r, delay));
+   try {
+    const res = await fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5_000), headers: { 'Content-Type': 'application/json', 'Tichori-Signature': signWebhook(secret, body) }, body });
+    if (res.ok) return;
+   } catch { /* retry */ }
+  }
+ };
+ try { after(deliver); } catch { void deliver(); }
+}
+
+// ---------- Treasury export and gas tank ----------
+export async function treasuryExport(vaultId: string | null, identityId: string | null) {
+ return withArkiv(async store => {
+  const vault = (await store.read()).vault;
+  memberWallet(vault, vaultId ?? '', identityId ?? '');
+  return { csv: treasuryCsv(vault, vaultId!), filename: `tichori-${whitechainVault(vault, vaultId!).name.replace(/[^\w-]+/g, '-').toLowerCase()}-payouts.csv` };
+ });
+}
+export async function relayerStatus() {
+ if (!isTreasuryConfigured()) return { configured: false };
+ const config = treasuryConfig(), client = whitechainClient();
+ const journal = await withTreasury(async ctx => structuredClone(ctx.journal) as TreasuryJournal);
+ const [balance, usdt] = await Promise.all([client.getBalance({ address: config.relayer.address }), client.readContract({ address: WHITECHAIN_USDT, abi: erc20Abi, functionName: 'balanceOf', args: [config.relayer.address] }).catch(() => 0n)]);
+ const avg = journal.sent ? BigInt(journal.gasWei) / BigInt(journal.sent) : 1_500_000_000_000_000n;
+ return {
+  configured: true, address: config.relayer.address, guard: config.guard, verifier: config.verifier.address,
+  balanceWbt: formatEther(balance), usdtBalance: formatUsdt(usdt), sponsoredTransactions: journal.sent, gasSpentWbt: formatEther(BigInt(journal.gasWei)),
+  averageCostWbt: formatEther(avg), transactionsLeft: Number(balance / (avg || 1n)), refundsReceivedUsdt: formatUsdt(journal.refundsMicroUsdt),
+  limits: { maxFeeGwei: config.maxFeeGwei, minBalanceWbt: formatEther(config.minRelayerWei), dailyVaultDeploys: config.dailyDeployCap, dailyExecutionsPerVault: config.dailyExecutionCapPerVault, gasRefundMicroUsdtPerGas: config.gasPriceMicroUsdt.toString() },
+  pending: journal.pending ? { hash: journal.pending.hash, purpose: journal.pending.purpose } : null,
+ };
+}

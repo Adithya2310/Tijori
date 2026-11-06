@@ -8,6 +8,7 @@ import { providers } from '../integrations/providers.ts';
 import { readWhitechainSafe } from '../whitechain/safe.ts';
 import { formatUsdt } from '../whitechain/chain.ts';
 import { IntegrationUnavailableError } from '../integrations/contracts.ts';
+import { treasuryCapabilities } from './treasury.ts';
 import { actionIdentity, applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from './domain.ts';
 
 export function capabilities() {
@@ -17,6 +18,7 @@ export function capabilities() {
   physicalApproval: { provider: providers.physicalApproval.id, mode: providers.physicalApproval.mode },
   externalVault: { provider: providers.externalVault.id, configured: providers.externalVault.configured },
   onchainExecution: 'user-wallet-and-safe-app',
+  whitechain: treasuryCapabilities(),
  };
 }
 export async function readState(identityId?: string, versioned = false) {

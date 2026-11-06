@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test tests/*.test.ts && node tests/flow.mjs",
+    "test:contracts": "forge test --root contracts",
+    "test:whitechain": "forge build --root contracts && node --experimental-strip-types tests/whitechain-flow.mjs",
     "arkiv:check": "node --experimental-strip-types scripts/arkiv.ts check",
     "arkiv:migrate": "node --experimental-strip-types scripts/arkiv.ts migrate",
     "arkiv:verify": "node --experimental-strip-types scripts/arkiv.ts verify-write"

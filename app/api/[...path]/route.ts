@@ -3,12 +3,13 @@ import { StorageError } from '@/lib/db';
 import { VaultError } from '@/lib/vault';
 import { IntegrationUnavailableError } from '@/lib/integrations/contracts';
 import { balance, capabilities, mutate, prepareDeployment, queryWorkflow, readState, verifyExternalApproval } from '@/lib/api/service';
+import { approveInSession, AuthError, createWhitechainVault, issueInboxKey, listApprovalSessions, proposePayout, relayerStatus, startApprovalSession, treasuryExport, vendorCreateInvoice, vendorGetInvoice, vendorRemind } from '@/lib/api/treasury';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 function failure(e: unknown) {
- const known = e instanceof StorageError || e instanceof VaultError || e instanceof IntegrationUnavailableError;
- return json({ error: known ? e.message : 'Could not process this request.' }, e instanceof IntegrationUnavailableError ? 501 : e instanceof StorageError ? 503 : 400);
+ const known = e instanceof StorageError || e instanceof VaultError || e instanceof IntegrationUnavailableError || e instanceof AuthError;
+ return json({ error: known ? e.message : 'Could not process this request.' }, e instanceof AuthError ? 401 : e instanceof IntegrationUnavailableError ? 501 : e instanceof StorageError ? 503 : 400);
 }
 const actions: Record<string, string> = {
  'identities': 'signup', 'identities/login': 'login', 'groups': 'groups',
@@ -22,6 +23,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ path: strin
  try {
   const { path, versioned } = route((await ctx.params).path);
   if (versioned && path === 'capabilities') return json(capabilities());
+  const query = req.nextUrl.searchParams;
+  if (versioned && path === 'treasury/sessions') return json(await listApprovalSessions(query.get('identityId') || ''));
+  if (versioned && path === 'relayer') return json(await relayerStatus());
+  if (versioned && path === 'invoices') return json(await vendorGetInvoice(req.headers.get('authorization'), query.get('id')));
+  if (versioned && path === 'treasury/export') {
+   const { csv, filename } = await treasuryExport(query.get('vaultId'), query.get('identityId'));
+   return new NextResponse(csv, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${filename}"`, 'Cache-Control': 'no-store' } });
+  }
   if (path === 'state') return json(await readState(req.nextUrl.searchParams.get('identityId') || undefined, versioned));
   if (path === 'balance') return json(await balance(req.nextUrl.searchParams.get('vaultId')));
   throw new VaultError('Unknown action.');
@@ -58,6 +67,15 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ path: stri
    if (path === 'physical-approvals/discover') return json(await queryWorkflow('discover', body));
    if (path === 'vaults/prepare') return json(await prepareDeployment(body));
    if (path === 'vaults/verify-approval') return json(await verifyExternalApproval(body));
+   // Whitechain treasury: gasless guarded vaults, co-present approval sessions, vendor invoice inbox.
+   const idempotencyKey = req.headers.get('idempotency-key');
+   if (path === 'vaults/whitechain') return json(await createWhitechainVault(body, idempotencyKey));
+   if (path === 'proposals') return json(await proposePayout(body, idempotencyKey));
+   if (path === 'approval-sessions') return json(await startApprovalSession(body));
+   if (path === 'physical-approvals' && body.sessionId !== undefined) return json(await approveInSession(body));
+   if (path === 'vaults/inbox-key') return json(await issueInboxKey(body));
+   if (path === 'invoices') return json(await vendorCreateInvoice(req.headers.get('authorization'), body));
+   if (path === 'invoices/remind') return json(await vendorRemind(req.headers.get('authorization'), body));
   }
   const action = versioned ? actions[path] : path;
   if (!['signup', 'login', 'groups', 'transactions', 'approve', 'register-safe'].includes(action)) throw new VaultError('Unknown action.');
