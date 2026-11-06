@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { after } from 'next/server';
-import { decodeEventLog, encodeFunctionData, formatEther, getAddress, hashTypedData, isAddress, recoverTypedDataAddress, zeroAddress, type Address, type Hex, type TransactionReceipt } from 'viem';
+import { decodeEventLog, encodeFunctionData, formatEther, getAddress, hashTypedData, isAddress, recoverMessageAddress, recoverTypedDataAddress, zeroAddress, type Address, type Hex, type TransactionReceipt } from 'viem';
 import { withArkiv, StorageError } from '../db.ts';
 import { applyAction, VaultError, type Vault } from '../vault.ts';
 import { providers, presenceProvider } from '../integrations/providers.ts';
@@ -10,10 +10,11 @@ import { applicationState } from './domain.ts';
 import { WHITECHAIN_CHAIN_ID, WHITECHAIN_USDT, explorerTx, formatUsdt } from '../whitechain/chain.ts';
 import { isTreasuryConfigured, treasuryConfig, whitechainClient } from '../whitechain/config.ts';
 import { readWhitechainSafe } from '../whitechain/safe.ts';
-import { attestationTypedData, erc20Abi, guardAbi, idToBytes32, packSignatures, safeAbi, safeTxTypedData, sortAddresses, usdtTransferData, type SafeTx } from '../whitechain/safe-tx.ts';
+import { attestationTypedData, erc20Abi, guardAbi, idToBytes32, inboxKeyMessage, packSignatures, safeAbi, safeTxTypedData, sortAddresses, usdtTransferData, type SafeTx } from '../whitechain/safe-tx.ts';
 import { bumpDaily, deployGuardedSafe, reconcilePending, relay, withTreasury, type Session, type TreasuryJournal } from '../whitechain/relayer.ts';
 import { createInvoice, createProposal, invoiceView, memberWallet, recordExecution, remindInvoice, treasuryCsv, whitechainVault } from '../whitechain/domain.ts';
 import { deriveMasterKey, inboxKeyFor, signWebhook, verifyInboxKey, webhookSecretFor } from '../whitechain/keys.ts';
+import { resolvesToPublicAddresses } from '../whitechain/net-guard.ts';
 
 const str = (x: unknown, max = 200) => (typeof x === 'string' ? x.trim() : '').slice(0, max);
 type Ctx = Parameters<Parameters<typeof withTreasury>[0]>[0];
@@ -107,6 +108,7 @@ export async function startApprovalSession(body: Record<string, unknown>) {
   const vault = await withArkiv(async store => (await store.read()).vault);
   const proposal = vault.proposals.find(p => p.id === proposalId);
   if (!proposal || proposal.status !== 'pending') throw new VaultError('This proposal is not pending.');
+  if (Object.values(ctx.journal.sessions).some(s => s.proposalId === proposalId && (s.status === 'executing' || s.status === 'submitted' || s.status === 'executed' || (s.status === 'failed' && !!s.txHash)))) throw new VaultError('This payout is already executing or executed on Whitechain. It will be recorded shortly.');
   const { group, wallet } = memberWallet(vault, proposal.group_id, initiatorId);
   const { config } = ctx, client = whitechainClient();
   const live = await readWhitechainSafe(group.safe!.address);
@@ -129,7 +131,7 @@ export async function startApprovalSession(body: Record<string, unknown>) {
   const challenge = await presenceProvider.createChallenge({ sessionId: id, vaultId: group.id, safeTxHash, expiresAt });
   const session: Session = { id, proposalId, vaultId: group.id, safe: live.address, threshold: live.threshold, owners: live.owners, initiatorId, safeTx: { to: safeTx.to, value: '0', data, operation: 0, safeTxGas: safeTx.safeTxGas.toString(), baseGas: safeTx.baseGas.toString(), gasPrice: gasPrice.toString(), gasToken: safeTx.gasToken, refundReceiver: safeTx.refundReceiver, nonce: live.nonce.toString() }, safeTxHash, challenge, presence: { provider: presenceProvider.id, mode: presenceProvider.mode }, createdAt: new Date(now).toISOString(), expiresAt, approvals: [], status: 'open' };
   ctx.journal.sessions[id] = session; await ctx.save();
-  // Only the initiator receives the code to emit.
+  // Only the initiator receives `emit`. In simulated mode, members' session listings also carry the code (documented limitation).
   return { session: sessionView(session, vault, initiatorId), emit: { challengeId: challenge.challengeId, code: challenge.code, expiresAt } };
  });
 }
@@ -158,7 +160,8 @@ export async function approveInSession(body: Record<string, unknown>) {
   if (!proposal || proposal.status !== 'pending') throw new VaultError('This proposal is no longer pending.');
   const { wallet } = memberWallet(vault, session.vaultId, walletId);
   if (!wallet.address || !wallet.object_name) throw new VaultError('Only enrolled identities can approve.');
-  if (session.approvals.some(a => a.walletId === walletId)) throw new VaultError('You already approved in this session.');
+  const retry = session.approvals.some(a => a.walletId === walletId);
+  if (retry && session.approvals.length < session.threshold) throw new VaultError('You already approved in this session.');
   // 1. Personal object, verified fresh for this approval.
   const object = await providers.objectMatching.verify({ identityId: wallet.id, address: wallet.address, objectName: wallet.object_name }, { objectName: str(body.objectName, 500), evidence: evidenceOf(body.objectEvidence) });
   if (!object.accepted) throw new VaultError('Your personal object did not match.');
@@ -171,7 +174,8 @@ export async function approveInSession(body: Record<string, unknown>) {
   try { signer = await recoverTypedDataAddress({ ...safeTxTypedData(WHITECHAIN_CHAIN_ID, session.safe, safeTxOf(session)), signature }); }
   catch { throw new VaultError('The approval signature is invalid.'); }
   if (signer.toLowerCase() !== wallet.address || !session.owners.some(o => o.toLowerCase() === wallet.address)) throw new VaultError('The approval was not signed by your vault key.');
-  session.approvals.push({ walletId, address: getAddress(signer), signature, at: new Date().toISOString(), objectMode: object.mode, presenceMode: presence.mode });
+  // A repeat approval is only accepted to retry a quorum whose payout was not sent (re-verified above).
+  if (!retry) { session.approvals.push({ walletId, address: getAddress(signer), signature, at: new Date().toISOString(), objectMode: object.mode, presenceMode: presence.mode }); delete session.error; }
   await ctx.save();
   if (session.approvals.length >= session.threshold) await finalize(ctx, session);
   const latest = await withArkiv(async store => (await store.read()).vault);
@@ -187,7 +191,7 @@ function evidenceOf(value: unknown) {
 async function finalize(ctx: Ctx, session: Session) {
  const { config } = ctx;
  bumpDaily(ctx.journal, `exec:${session.safe}`, config.dailyExecutionCapPerVault, 'This vault reached its daily relayed execution limit.');
- session.status = 'executing'; await ctx.save();
+ session.status = 'executing'; delete session.error; await ctx.save();
  const approvers = sortAddresses(session.approvals.map(a => a.address));
  const attestation = { safe: session.safe, safeTxHash: session.safeTxHash, sessionId: idToBytes32(session.id), approvers, ref: idToBytes32(session.proposalId), expiresAt: BigInt(Math.floor(Date.parse(session.expiresAt) / 1000) + 300) };
  const verifierSignature = await config.verifier.signTypedData(attestationTypedData(WHITECHAIN_CHAIN_ID, config.guard, attestation));
@@ -197,7 +201,11 @@ async function finalize(ctx: Ctx, session: Session) {
  try { receipt = await relay(ctx, { to: config.guard, data, purpose: 'execute', ref: session.id }); }
  catch (e) {
   if (ctx.journal.pending?.ref === session.id) { session.status = 'submitted'; session.txHash = ctx.journal.pending.hash; await ctx.save(); return; }
-  session.status = 'failed'; session.error = e instanceof Error ? e.message : 'Execution failed.'; await ctx.save(); return;
+  const confirmed = ctx.journal.confirmed?.[session.id];
+  if (confirmed) { session.status = 'submitted'; session.txHash = confirmed.hash; await ctx.save(); return; }
+  // Nothing was broadcast: keep the approvals; any present approver can retry before the session expires.
+  session.status = Date.parse(session.expiresAt) > Date.now() ? 'open' : 'expired';
+  session.error = `${e instanceof Error ? e.message : 'Execution failed.'} Nothing was sent. Approve again to retry.`; await ctx.save(); return;
  }
  await applyReceipt(ctx, session, receipt);
 }
@@ -234,19 +242,36 @@ async function reconcileSessions(ctx: Ctx) {
  const pendingReceipt = await reconcilePending(ctx.journal, ctx.save).catch(() => null);
  for (const session of Object.values(ctx.journal.sessions)) {
   if (session.status === 'open' && Date.parse(session.expiresAt) <= Date.now()) { session.status = 'expired'; await ctx.save(); }
-  if (session.status === 'submitted' && session.txHash) {
-   const receipt = pendingReceipt?.transactionHash === session.txHash ? pendingReceipt : await whitechainClient().getTransactionReceipt({ hash: session.txHash }).catch(() => null);
+  if (session.status === 'executing' || session.status === 'submitted') {
+   const hash = ctx.journal.pending?.ref === session.id ? ctx.journal.pending.hash : ctx.journal.confirmed?.[session.id]?.hash ?? session.txHash;
+   if (hash && hash !== session.txHash) { session.txHash = hash; session.status = 'submitted'; await ctx.save(); }
+   const receipt = !hash ? null : pendingReceipt?.transactionHash === hash ? pendingReceipt : await whitechainClient().getTransactionReceipt({ hash }).catch(() => null);
+   const dropped = !!hash && !receipt && ctx.journal.pending?.ref !== session.id && !ctx.journal.confirmed?.[session.id];
    if (receipt) await applyReceipt(ctx, session, receipt);
+   else if (!hash || dropped) {
+    delete session.txHash;
+    // Interrupted before signing: nothing was broadcast, so the quorum may retry while the session lasts.
+    session.status = Date.parse(session.expiresAt) > Date.now() ? 'open' : 'expired';
+    session.error = 'Execution was interrupted before anything was sent. Approve again to retry.'; await ctx.save();
+   }
   }
   if (!session.recorded) await recordSession(ctx, session);
-  if (Date.now() - Date.parse(session.createdAt) > 2 * 86_400_000 && session.status !== 'submitted') delete ctx.journal.sessions[session.id];
+  const settled = session.recorded || session.status === 'expired' || session.status === 'superseded' || (session.status === 'open' && !session.approvals.length);
+  if (settled && Date.now() - Date.parse(session.createdAt) > 2 * 86_400_000) delete ctx.journal.sessions[session.id];
  }
 }
 
 // ---------- Vendor invoice inbox (Operate) ----------
 export async function issueInboxKey(body: Record<string, unknown>) {
- const vaultId = str(body.vaultId, 100), identityId = str(body.identityId, 100), master = masterKey();
- await withArkiv(async store => { memberWallet((await store.read()).vault, vaultId, identityId); });
+ const vaultId = str(body.vaultId, 100), identityId = str(body.identityId, 100), issuedAt = str(body.issuedAt, 40), signature = str(body.signature, 300) as Hex, master = masterKey();
+ const age = Date.now() - Date.parse(issuedAt);
+ if (!(age >= -60_000 && age <= 300_000)) throw new VaultError('Sign a fresh inbox key request (at most 5 minutes old).');
+ const { wallet } = await withArkiv(async store => memberWallet((await store.read()).vault, vaultId, identityId));
+ // The inbox key is a long-lived credential: require proof from the member's own identity key, not just their ID.
+ let signer: Address;
+ try { signer = await recoverMessageAddress({ message: inboxKeyMessage(vaultId, identityId, issuedAt), signature }); }
+ catch { throw new VaultError('The inbox key request signature is invalid.'); }
+ if (!wallet.address || signer.toLowerCase() !== wallet.address) throw new VaultError('The inbox key request was not signed by your identity key.');
  return { inboxKey: inboxKeyFor(master, vaultId), webhookSecret: webhookSecretFor(master, vaultId), endpoint: '/api/v1/invoices' };
 }
 function inboxVault(authorization: string | null) {
@@ -298,6 +323,8 @@ function scheduleWebhook(url: string, vaultId: string, payload: unknown) {
  const deliver = async () => {
   for (const delay of [0, 2_000, 10_000]) {
    if (delay) await new Promise(r => setTimeout(r, delay));
+   // Re-check at delivery: DNS names must resolve only to public addresses (residual DNS-rebinding risk documented).
+   if (!allowPrivateWebhooks() && !(await resolvesToPublicAddresses(new URL(url).hostname))) return;
    try {
     const res = await fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5_000), headers: { 'Content-Type': 'application/json', 'Tichori-Signature': signWebhook(secret, body) }, body });
     if (res.ok) return;

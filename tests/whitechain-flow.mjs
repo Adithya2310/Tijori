@@ -12,7 +12,7 @@ import { createPublicClient, createWalletClient, getAddress, http, parseEther } 
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { whitechainSepolia } from 'viem/chains';
 import { rpcFixture } from './rpc-fixture.mjs';
-import { erc20Abi, packSignatures, safeAbi, safeTxTypedData } from '../lib/whitechain/safe-tx.ts';
+import { erc20Abi, inboxKeyMessage, packSignatures, safeAbi, safeTxTypedData } from '../lib/whitechain/safe-tx.ts';
 import { verifyWebhook } from '../packages/tichori-invoices/index.mjs';
 
 if (spawnSync('anvil', ['--version']).error) { console.log('Skipped Whitechain flow: Foundry anvil is not installed.'); process.exit(0); }
@@ -76,7 +76,13 @@ try {
  assert.equal((await call(`balance?vaultId=${vaultId}`)).data.balanceUsdt, '1000');
 
  // Vendor invoice inbox (Operate): derived key, idempotent externalId, signed webhook on payment.
- const inbox = (await call('vaults/inbox-key', { vaultId, identityId: people[0].id })).data;
+ const issuedAt = new Date().toISOString();
+ const inboxRequest = { vaultId, identityId: people[0].id, issuedAt, signature: await people[0].account.signMessage({ message: inboxKeyMessage(vaultId, people[0].id, issuedAt) }) };
+ assert.equal((await call('vaults/inbox-key', { ...inboxRequest, signature: await people[1].account.signMessage({ message: inboxKeyMessage(vaultId, people[0].id, issuedAt) }) })).status, 400, 'inbox key needs the member own key');
+ assert.equal((await call('vaults/inbox-key', { vaultId, identityId: people[0].id })).status, 400, 'unsigned inbox key request is refused');
+ const inbox = (await call('vaults/inbox-key', inboxRequest)).data;
+ assert.match(inbox.inboxKey, /^tinbox_/);
+ assert.equal((await call('invoices', { vendorName: 'X', vendorAddress: privateKeyToAccount(generatePrivateKey()).address, amount: '1', dueDate: '2026-12-01', webhookUrl: 'http://127.0.0.1.nip.io/hook', externalId: 'SSRF-1' }, { Authorization: `Bearer ${inbox.inboxKey}` })).status, 200, 'private DNS names pass creation only when private webhooks are allowed');
  const vendor = privateKeyToAccount(generatePrivateKey()).address;
  const auth = { Authorization: `Bearer ${inbox.inboxKey}` };
  const invoiceBody = { vendorName: 'Priya Studio', vendorAddress: vendor, amount: '250', memo: 'Website redesign', dueDate: '2026-11-20', externalId: 'INV-1', webhookUrl: `http://127.0.0.1:${webhook.address().port}/hook` };

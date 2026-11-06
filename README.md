@@ -94,6 +94,8 @@ No testnet funds are spent by tests.
   - The real implementations plug into `ObjectMatchingProvider` and `PresenceSessionProvider` (`lib/integrations`).
   - The UI emits `tichori:presence-emit` and calls `window.tichoriPresence.listen()` when present.
   - Frequency matching alone does not prove proximity: relay and replay must be handled by the real provider.
+- **Simulated room code is visible to members:** in simulated presence mode, members' session listings include the room code so the flow can be demonstrated without audio. In live mode only the initiator's device receives it.
+- **What a majority can still do:** the guard does not restrict *what* a co-present, attested majority approves. The server only builds USDT payouts, but the Safe would accept any attested transaction the owners sign, including adding modules. Safe 1.4.1 module transactions are not checked by transaction guards.
 - **Trusted verifier:** the verifier is a trusted Tichori server key. The guard enforces that its attestation exists and matches, but cannot itself prove where anyone was.
 - **No authentication yet:** the API is still unauthenticated (identity IDs are demo selectors). Bind to localhost; a phone/camera/mic demo needs an HTTPS tunnel and deliberate exposure.
 - **Login:** it still asks for the public address. The identity key is unlocked with the passphrase for signing and kept in tab memory only.

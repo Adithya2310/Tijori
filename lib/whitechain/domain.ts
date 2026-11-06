@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { getAddress, isAddress } from 'viem';
 import { VaultError, type Invoice, type Proposal, type Vault } from '../vault.ts';
 import { explorerTx, formatUsdt, parseUsdt } from './chain.ts';
+import { isNonPublicHostname } from './net-guard.ts';
 
 const str = (x: unknown, max = 500) => (typeof x === 'string' ? x.trim() : '').slice(0, max);
 const fail = (message: string): never => { throw new VaultError(message); };
@@ -52,13 +53,12 @@ export function recordExecution(vault: Vault, input: { proposalId: string; succe
  return proposal!;
 }
 
-const privateHost = (host: string) => /^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|\[?::1\]?$|172\.(1[6-9]|2\d|3[01])\.)/i.test(host) || host.endsWith('.local') || host.endsWith('.internal');
 export function validWebhookUrl(value: unknown, allowPrivate: boolean) {
  if (value === undefined || value === null || value === '') return undefined;
  let url: URL;
  try { url = new URL(String(value)); } catch { return fail('Enter a valid webhook URL.'); }
  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || String(value).length > 2048) fail('Webhook URLs must be plain http(s) URLs.');
- if (!allowPrivate && privateHost(url.hostname)) fail('Private-network webhook URLs are disabled on this server.');
+ if (!allowPrivate && isNonPublicHostname(url.hostname)) fail('Private-network webhook URLs are disabled on this server.');
  return url.toString();
 }
 

@@ -70,6 +70,15 @@ test('invoices: idempotent externalId, validated fields, private webhooks gated,
  validateVault(vault);
 });
 
+test('webhook URLs on private networks are refused unless explicitly allowed', async () => {
+ const { vault, vaultId } = treasury();
+ const { isNonPublicAddress, resolvesToPublicAddresses } = await import('../lib/whitechain/net-guard.ts');
+ for (const url of ['http://[::1]/h', 'http://[::ffff:7f00:1]/h', 'http://[fc00::1]/h', 'http://100.64.0.1/h', 'http://169.254.169.254/latest', 'http://intranet/h']) assert.throws(() => createInvoice(vault, vaultId, { vendorName: 'S', vendorAddress: addr(7), amount: '1', dueDate: '2026-12-01', webhookUrl: url }, { allowPrivateWebhooks: false }), /Private-network/, url);
+ for (const ip of ['::ffff:10.0.0.1', '::', '0.0.0.0', '198.18.0.1']) assert.equal(isNonPublicAddress(ip), true, ip);
+ assert.equal(isNonPublicAddress('8.8.8.8'), false);
+ assert.equal(await resolvesToPublicAddresses('localhost'), false);
+});
+
 test('accountant CSV escapes spreadsheet formulas', () => {
  const { vault, a, vaultId } = treasury();
  createProposal(vault, { vaultId, proposerId: a, to: addr(7), amount: '1', note: '=HYPERLINK("x")' });

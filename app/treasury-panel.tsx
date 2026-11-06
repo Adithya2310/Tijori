@@ -5,7 +5,7 @@ import { tichori, type ApplicationState, type ApprovalSession, type RelayerStatu
 import { unlockIdentityAccount, type KeyEnvelope } from '@/lib/identity-key';
 import { sessionSigner, setSessionSigner } from '@/lib/session-signer';
 import { explorerAddress, explorerTx, formatUsdt } from '@/lib/whitechain/chain';
-import { safeTxTypedData } from '@/lib/whitechain/safe-tx';
+import { inboxKeyMessage, safeTxTypedData } from '@/lib/whitechain/safe-tx';
 
 type Group = ApplicationState['groups'][number];
 type Identity = { id: string; name: string; address: string | null };
@@ -57,17 +57,22 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
   if ('simulatedCode' in session.presence && session.presence.simulatedCode) return session.presence.simulatedCode;
   throw new Error('No room code heard yet. Stay near the person who started the session.');
  }
+ async function ensureSigner() {
+  const existing = sessionSigner(me.address);
+  if (existing) return existing;
+  if (!me.address) throw new Error('This identity has no address.');
+  if (!objectName.trim()) throw new Error('Show your personal object (enter its description in this demo).');
+  if (passphrase.length < 12) throw new Error('Enter your key passphrase to unlock your signer.');
+  const login = await tichori.mutate('login', { address: me.address, objectName: objectName.trim() }, crypto.randomUUID());
+  const signer = await unlockIdentityAccount(me.address, login.keyEnvelope as KeyEnvelope, passphrase);
+  setSessionSigner(signer); setPassphrase('');
+  return signer;
+ }
  async function approve(session: ApprovalSession) {
   if (!me.address) return setError('This identity has no address.');
   if (!objectName.trim()) return setError('Show your personal object (enter its description in this demo).');
   await run(async () => {
-   let signer = sessionSigner(me.address);
-   if (!signer) {
-    if (passphrase.length < 12) throw new Error('Enter your key passphrase to unlock your signer.');
-    const login = await tichori.mutate('login', { address: me.address, objectName: objectName.trim() }, crypto.randomUUID());
-    signer = await unlockIdentityAccount(me.address!, login.keyEnvelope as KeyEnvelope, passphrase);
-    setSessionSigner(signer); setPassphrase('');
-   }
+   const signer = await ensureSigner();
    const t = session.safeTx;
    const signature = await signer.signTypedData(safeTxTypedData(session.chainId, session.safe, { ...t, value: BigInt(t.value), safeTxGas: BigInt(t.safeTxGas), baseGas: BigInt(t.baseGas), gasPrice: BigInt(t.gasPrice), nonce: BigInt(t.nonce) }));
    const code = await heardCode(session);
@@ -77,7 +82,13 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
    else if (result.session.status === 'failed') setError(result.session.error || 'The payout failed on-chain.');
   });
  }
- async function issueInbox() { await run(async () => { setInbox(await tichori.inboxKey(vault.id, me.id)); }); }
+ async function issueInbox() {
+  await run(async () => {
+   const signer = await ensureSigner(), issuedAt = new Date().toISOString();
+   const signature = await signer.signMessage({ message: inboxKeyMessage(vault.id, me.id, issuedAt) });
+   setInbox(await tichori.inboxKey({ vaultId: vault.id, identityId: me.id, issuedAt, signature })); setObjectName('');
+  });
+ }
  const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); notify('Copied.'); } catch { fail('Could not copy.'); } };
  const ownerName = (address: string) => data.wallets.find(w => w.address === address.toLowerCase())?.name ?? short(address);
 
@@ -118,7 +129,9 @@ export function TreasuryPanel({ vault, data, me, onState, notify, fail }: { vaul
      <button className="submit" disabled={busy || active.status !== 'open'} onClick={() => void approve(active)}>Approve together <Check size={17} /></button></>}</>}
    {modal === 'inbox' && <><div className="modal-icon"><FileText /></div><div className="section-kicker">LET VENDORS BILL THIS VAULT</div><h2>Invoice inbox key</h2><p className="modal-desc">Vendors use this key with the @tichori/invoices SDK. Paid invoices notify them by signed webhook with the Whitechain receipt.</p>
     {inbox ? <div className="details"><div><span>Inbox key</span><strong className="mono">{inbox.inboxKey}</strong></div><div><span>Webhook secret</span><strong className="mono">{inbox.webhookSecret}</strong></div><div><span>Endpoint</span><strong className="mono">POST {inbox.endpoint}</strong></div><button className="light-btn" onClick={() => void copy(`TICHORI_INBOX_KEY=${inbox.inboxKey}\nTICHORI_WEBHOOK_SECRET=${inbox.webhookSecret}`)}><Copy size={15} /> Copy as env</button></div>
-     : <button className="submit" disabled={busy} onClick={() => void issueInbox()}>Show inbox key <Wallet size={17} /></button>}</>}
+     : <>{!sessionSigner(me.address) && <><label>Show your personal object<input value={objectName} onChange={e => setObjectName(e.target.value)} placeholder="Your registered object description" /></label><label>Key passphrase<input type="password" value={passphrase} onChange={e => setPassphrase(e.target.value)} autoComplete="current-password" /></label></>}
+      <p className="form-hint">Your identity key signs this request in the browser. The key and webhook secret are shown once here.</p>
+      <button className="submit" disabled={busy} onClick={() => void issueInbox()}>Show inbox key <Wallet size={17} /></button></>}</>}
    {error && <div className="error modal-error">{error}</div>}
   </div></div>}
   {error && !modal && <div className="error">{error}</div>}

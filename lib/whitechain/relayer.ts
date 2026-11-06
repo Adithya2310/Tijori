@@ -24,6 +24,8 @@ type Deploy = { owners: Address[]; saltNonce: string; address: Address; status: 
 export type TreasuryJournal = {
  version: 1; relayer: Address; chainId: number;
  pending?: PendingTx; sent: number; gasWei: string; refundsMicroUsdt: string;
+ /** Confirmed relayer transactions by reference (deploy opId or session ID), so no receipt is ever lost. */
+ confirmed?: Record<string, { hash: Hex; purpose: PendingTx['purpose']; at: string }>;
  daily: Record<string, number>; deploys: Record<string, Deploy>; sessions: Record<string, Session>;
 };
 
@@ -64,6 +66,11 @@ async function locked<T>(work: Parameters<typeof withTreasury<T>>[0]): Promise<T
  } finally { await lock.close(); await unlink(lockPath); }
 }
 
+function markConfirmed(journal: TreasuryJournal, pending: PendingTx) {
+ const confirmed = journal.confirmed ??= {};
+ confirmed[pending.ref] = { hash: pending.hash, purpose: pending.purpose, at: new Date().toISOString() };
+ for (const [ref, entry] of Object.entries(confirmed)) if (Date.now() - Date.parse(entry.at) > 7 * 86_400_000) delete confirmed[ref];
+}
 /** Resolve a previously signed transaction. Never resends it. Returns its receipt, or null if still pending. */
 export async function reconcilePending(journal: TreasuryJournal, save: () => Promise<void>) {
  const pending = journal.pending;
@@ -79,7 +86,7 @@ export async function reconcilePending(journal: TreasuryJournal, save: () => Pro
   return null;
  }
  journal.sent += 1; journal.gasWei = (BigInt(journal.gasWei) + receipt.gasUsed * receipt.effectiveGasPrice).toString();
- delete journal.pending; await save();
+ markConfirmed(journal, pending); delete journal.pending; await save();
  return receipt;
 }
 
@@ -115,7 +122,7 @@ export async function relay(ctx: { journal: TreasuryJournal; save: () => Promise
  const receipt = await client.waitForTransactionReceipt({ hash, timeout: 30_000, pollingInterval: 500 }).catch(() => null);
  if (!receipt) throw new StorageError('The relayer transaction is not confirmed yet. It is saved and will be reconciled, never resent.');
  journal.sent += 1; journal.gasWei = (BigInt(journal.gasWei) + receipt.gasUsed * receipt.effectiveGasPrice).toString();
- delete journal.pending; await save();
+ markConfirmed(journal, journal.pending!); delete journal.pending; await save();
  return receipt;
 }
 
@@ -158,6 +165,7 @@ export async function deployGuardedSafe(opId: string, owners: Address[]) {
   ]);
   const sameOwners = onchainOwners.length === owners.length && onchainOwners.every(o => owners.some(x => x.toLowerCase() === o.toLowerCase()));
   if (!sameOwners || Number(threshold) !== majority(owners.length) || !guardSlot || getAddress(`0x${guardSlot.slice(-40)}`) !== config.guard || getAddress(verifier) !== config.verifier.address) throw new VaultError('The deployed vault does not match the requested guarded configuration.');
+  deploy.txHash ??= journal.confirmed?.[opId]?.hash; // confirmed by an earlier reconcile
   if (!deploy.txHash) throw new StorageError('The vault exists but its deployment transaction is unknown. Reconcile manually.');
   deploy.status = 'deployed'; await save();
   return { address: deploy.address, owners, threshold: Number(threshold), saltNonce: deploy.saltNonce, deploymentTxHash: deploy.txHash, guard: config.guard };

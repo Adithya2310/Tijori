@@ -116,14 +116,16 @@ Guarded Safe vaults on Whitechain Sepolia (chain 1874). These endpoints share th
 | POST | `/approval-sessions` | `proposalId`, `initiatorId` (a current Safe owner) | Fixes the SafeTx at the live nonce (USDT transfer, vault-paid USDT gas refund capped by the signed fields), supersedes other open sessions for the vault and creates a presence challenge. Returns `{ session, emit }`; only the initiator receives `emit.code` to broadcast. |
 | GET | `/treasury/sessions?identityId=` | Demo identity | Open and recent sessions for that member's vaults: SafeTx fields to sign, quorum progress, presence `challengeId`. In simulated mode it also returns `simulatedCode`. |
 | POST | `/physical-approvals` with `sessionId` | `sessionId`, `walletId`, `objectName`, `evidence: { reference: heardCode, challengeId }`, `signature` (EIP-712 SafeTx signature by the approver's identity key) | Checks, for this approval: object (`ObjectMatchingProvider`), presence in this session (`PresenceSessionProvider`), signer = this identity and a current owner. At the threshold, the verifier signs the `CoPresence` attestation and the relayer calls `executeWithAttestation`. Returns the session (`executed` with `txHash`) and scoped state. |
-| POST | `/vaults/inbox-key` | `vaultId`, `identityId` (member) | `{ inboxKey, webhookSecret, endpoint }`. Derived from the server master key, so nothing secret is stored. |
+| POST | `/vaults/inbox-key` | `vaultId`, `identityId` (member), `issuedAt` (ISO time, at most 5 min old), `signature` (EIP-191 over `inboxKeyMessage(vaultId, identityId, issuedAt)` from `lib/whitechain/safe-tx.ts`, by the member's identity key) | `{ inboxKey, webhookSecret, endpoint }`. Derived from the server master key, so nothing secret is stored. Rotating `TICHORI_API_MASTER_KEY` revokes every issued key. |
 | POST | `/invoices` | `Authorization: Bearer tinbox_…`; `vendorName`, `vendorAddress`, `amount`, `memo`, `dueDate` (YYYY-MM-DD), optional `externalId` (idempotent) and `webhookUrl` | `{ invoice, created, receiptPath }`. |
 | GET | `/invoices?id=` | Bearer inbox key | Invoice with `payment { txHash, explorerUrl, paidAt, approvals }` once paid. |
 | POST | `/invoices/remind` | Bearer inbox key; `id` | Increments reminders, at most hourly. |
 | GET | `/treasury/export?vaultId=&identityId=` | Member | `text/csv` accountant export, with formula-safe cells. |
 | GET | `/relayer` | None | Gas tank: relayer WBT, payouts sponsored, USDT refunds received, limits, pending transaction. |
 
-**Webhooks:** `invoice.paid` is POSTed to the invoice's `webhookUrl` with header `Tichori-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">`. It is retried twice. Verify it with `verifyWebhook()` from `@tichori/invoices`. Private-network URLs require `TICHORI_WEBHOOK_ALLOW_PRIVATE=1`.
+**Webhooks:** `invoice.paid` is POSTed to the invoice's `webhookUrl` with header `Tichori-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">`. It is retried twice. Verify it with `verifyWebhook()` from `@tichori/invoices`.
+
+By default, non-public destinations are refused. That covers loopback, private, link-local, CGNAT, ULA, IPv4-mapped and reserved addresses. They are refused at invoice creation for IP literals and local names, and again after DNS resolution at every delivery. A residual DNS-rebinding window remains between that check and the connection. `TICHORI_WEBHOOK_ALLOW_PRIVATE=1` allows local destinations for the local vendor example.
 
 **Presence provider:** implement `PresenceSessionProvider` (`createChallenge`, `verify`) in `lib/integrations`.
 - In the browser, the initiator's page dispatches `tichori:presence-emit` with `{ challengeId, code, expiresAt }` for the emitter.

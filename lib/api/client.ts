@@ -37,7 +37,7 @@ export function createTichoriClient(baseUrl = '/api/v1', fetcher: typeof fetch =
   startSession: (proposalId: string, initiatorId: string) => request<Awaited<ReturnType<typeof startApprovalSession>>>('approval-sessions', { proposalId, initiatorId }),
   sessions: (identityId: string) => request<{ sessions: ApprovalSession[] }>('treasury/sessions?identityId=' + encodeURIComponent(identityId)),
   approveInSession: (body: { sessionId: string; walletId: string; objectName: string; signature: string; evidence: Evidence }) => request<ApplicationState & { session: ApprovalSession }>('physical-approvals', body),
-  inboxKey: (vaultId: string, identityId: string) => request<Awaited<ReturnType<typeof issueInboxKey>>>('vaults/inbox-key', { vaultId, identityId }),
+  inboxKey: (body: { vaultId: string; identityId: string; issuedAt: string; signature: string }) => request<Awaited<ReturnType<typeof issueInboxKey>>>('vaults/inbox-key', body),
   relayer: () => request<RelayerStatus>('relayer'),
   exportUrl: (vaultId: string, identityId: string) => `${baseUrl.replace(/\/$/, '')}/treasury/export?vaultId=${encodeURIComponent(vaultId)}&identityId=${encodeURIComponent(identityId)}`,
  };

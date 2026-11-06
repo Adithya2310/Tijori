@@ -76,3 +76,5 @@ export function packSignatures(entries: { signer: Address; signature: Hex }[]): 
 export const sortAddresses = (list: Address[]) => [...list].map(a => getAddress(a)).sort((a, b) => (BigInt(a) < BigInt(b) ? -1 : 1));
 export const idToBytes32 = (id: string) => keccak256(stringToBytes(id));
 export const usdtTransferData = (to: Address, amount: bigint) => encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [getAddress(to), amount] });
+/** EIP-191 message a vault member signs with their identity key to be issued the vault's inbox key. */
+export const inboxKeyMessage = (vaultId: string, identityId: string, issuedAt: string) => `Tichori: issue the invoice inbox key\nvault: ${vaultId}\nidentity: ${identityId}\nissued: ${issuedAt}`;
