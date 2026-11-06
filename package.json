@@ -7,10 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test tests/*.test.ts && node tests/flow.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/modem.test.mjs tests/network.test.mjs && node tests/flow.mjs",
     "arkiv:check": "node --experimental-strip-types scripts/arkiv.ts check",
     "arkiv:migrate": "node --experimental-strip-types scripts/arkiv.ts migrate",
-    "arkiv:verify": "node --experimental-strip-types scripts/arkiv.ts verify-write"
+    "arkiv:verify": "node --experimental-strip-types scripts/arkiv.ts verify-write",
+    "dev:https": "node scripts/dev-phone.mjs",
+    "dev:phone": "node scripts/dev-phone.mjs",
+    "dev:phone:watch": "node scripts/dev-phone.mjs --watch"
   },
   "dependencies": {
     "@arkiv-network/sdk": "1.0.1",
@@ -21,7 +24,11 @@
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "server-only": "^0.0.1",
-    "viem": "^2.57.16"
+    "viem": "^2.57.16",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/dm-serif-display": "^5.3.0",
+    "ggwave": "^0.4.0",
+    "qrcode.react": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

@@ -5,3 +5,7 @@ data/
 .env*
 
 !.env.example
+
+.next-phone/
+.next-phone-build/
+.local-https/

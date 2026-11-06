@@ -25,6 +25,7 @@ try {
  let ready = false;
  for (let i=0;i<100;i++) { try { if ((await request('state')).status === 200) { ready=true; break; } } catch {} await new Promise(r=>setTimeout(r,100)); }
  assert.ok(ready, 'server started');
+ const network=(await request('network-info')).data;assert.equal(network.enabled,false);assert.deepEqual(network.urls,[]);
  let result=await request('signup',{name:'Person 0',address:addr(1),keyEnvelope,objectName:'Object 0'});
  assert.equal(result.status,200); const creator=result.data.identityId;
  assert.equal((await request('login',{address:addr(1),keyEnvelope,objectName:'wrong'})).status,400);
@@ -58,6 +59,67 @@ try {
  assert.equal(state.transactions[0].approvals.length,3);
  assert.equal((await request('approve',{transactionId:tx.id,walletId:ids[3]})).status,400);
  assert.equal((await request('state')).data.transactions[0].status,'completed');
+ // Proximity uses the same encrypted Arkiv aggregate and never creates a transfer.
+ const post=(action,extra={},headers={})=>request('proximity',{groupId:group.id,walletId:creator,action,...extra},headers);
+ const txBefore=JSON.stringify((await request('state')).data.transactions);
+ const startHeaders={'Idempotency-Key':'acoustic-start'};
+ const beforeCheck=rpc.control.sends;
+ let check=await post('start',{},startHeaders);assert.equal(check.status,200);
+ const session=check.data.session,nonce=check.data.nonce;
+ assert.match(nonce,/^[A-Z0-9]{6}$/);assert.equal(session.expiresAt-session.createdAt,120000);
+ assert.equal(rpc.control.sends,beforeCheck+1);
+ assert.equal((await post('start',{},startHeaders)).data.nonce,nonce);
+ assert.equal(rpc.control.sends,beforeCheck+1,'start retry must not spend another fee');
+ assert.equal((await post('start')).status,400);
+ const status=await request(`proximity?groupId=${group.id}&walletId=${ids[1]}`);
+ assert.equal(status.status,200);assert.ok(!JSON.stringify(status.data).includes(nonce));
+ assert.ok(!JSON.stringify((await request('state')).data).includes(nonce));
+ assert.ok(!JSON.stringify(rpc.entity()).includes(nonce),'challenge stays encrypted on Arkiv');
+ assert.equal((await post('verify',{sessionId:session.id,nonce})).status,400);
+ assert.equal((await post('verify',{walletId:ids[1],sessionId:session.id,nonce:'WRONG1'})).status,400);
+ assert.equal((await post('verify',{walletId:ids[1],sessionId:'wrong',nonce})).status,400);
+ assert.equal((await post('cancel',{walletId:ids[1],sessionId:session.id})).status,400);
+ const beforeMatches=rpc.control.sends;
+ const parallelMatches=await Promise.all([ids[1],ids[2]].map(walletId=>post('verify',{walletId,sessionId:session.id,nonce})));
+ assert.ok(parallelMatches.every(r=>r.status===200));
+ const matches=(await request(`proximity?groupId=${group.id}&walletId=${creator}`)).data.session.matches;
+ assert.equal(matches.length,2);assert.equal(rpc.control.sends,beforeMatches+2);
+ const hash=matches.find(m=>m.walletId===ids[1]).attestationHash;
+ assert.equal((await post('verify',{walletId:ids[1],sessionId:session.id,nonce})).data.session.matches.find(m=>m.walletId===ids[1]).attestationHash,hash);
+ assert.equal(rpc.control.sends,beforeMatches+2,'duplicate match and polling must not spend');
+ const second=(await request('state')).data.groups.find(g=>g.id!==group.id);
+ assert.equal((await post('verify',{groupId:second.id,walletId:ids[1],sessionId:session.id,nonce})).status,400);
+ assert.equal((await post('verify',{walletId:'outsider',sessionId:session.id,nonce})).status,400);
+ assert.equal((await post('cancel',{sessionId:session.id},{Origin:'https://other.example'})).status,400);
+ assert.equal((await request('proximity',[])).status,400);
+ assert.equal((await request('proximity',{action:'start',groupId:group.id,walletId:creator,extra:'x'.repeat(2050)})).status,400);
+ rpc.control.failQuery=true;assert.equal((await request(`proximity?groupId=${group.id}&walletId=${creator}`)).status,503);rpc.control.failQuery=false;
+ const snapshot=(await request(`proximity?groupId=${group.id}&walletId=${creator}`)).data;
+ server.kill('SIGTERM');await new Promise(resolve=>server.once('exit',resolve));
+ server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','-p',String(port)],{env,stdio:'ignore'});
+ let resumed=false;for(let i=0;i<100;i++){try{const r=await request(`proximity?groupId=${group.id}&walletId=${creator}`);if(r.status===200){assert.deepEqual(r.data,snapshot);resumed=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}
+ assert.ok(resumed,'active acoustic session and matches survive restart');
+ assert.equal((await post('cancel',{sessionId:session.id})).data.session.status,'cancelled');
+ const beforeCancelRetry=rpc.control.sends;assert.equal((await post('cancel',{sessionId:session.id})).status,200);assert.equal(rpc.control.sends,beforeCancelRetry);
+ assert.equal((await post('verify',{walletId:ids[3],sessionId:session.id,nonce})).status,400);
+ const racing=await Promise.all([post('start'),post('start')]);assert.deepEqual(racing.map(r=>r.status).sort(),[200,400]);
+ const winner=racing.find(r=>r.status===200).data;
+ assert.notEqual(winner.nonce,nonce);
+ assert.equal((await post('verify',{walletId:ids[1],sessionId:session.id,nonce})).status,400);
+ assert.equal((await post('cancel',{sessionId:winner.session.id})).status,200);
+ // Reconcile an uncertain start before replaying its stable operation ID; never resend.
+ rpc.control.loseSendResponse=true;rpc.control.hideReceipt=true;
+ const lostHeaders={'Idempotency-Key':'lost-acoustic-start'};
+ const beforeLost=rpc.control.sends;assert.equal((await post('start',{},lostHeaders)).status,503);
+ assert.equal((await request(`proximity?groupId=${group.id}&walletId=${creator}`)).status,503);
+ rpc.control.hideReceipt=false;const recovered=await post('start',{},lostHeaders);
+ assert.equal(recovered.status,200);assert.ok(recovered.data.nonce);assert.equal(rpc.control.sends,beforeLost+1);
+ assert.equal((await post('cancel',{sessionId:recovered.data.session.id})).status,200);
+ rpc.control.failEstimate=true;const beforeFailed=rpc.control.sends;
+ assert.equal((await post('start')).status,503);assert.equal(rpc.control.sends,beforeFailed);rpc.control.failEstimate=false;
+ assert.equal((await request(`proximity?groupId=${group.id}&walletId=${creator}`)).data.session.status,'cancelled','failed write leaves the previous check intact');
+ assert.equal(JSON.stringify((await request('state')).data.transactions),txBefore,'acoustic checks never alter transfers or approvals');
+ console.log('Passed Arkiv acoustic flow: encrypted challenges, read-only polling, concurrent starts/matches, idempotency, cancellation, isolation, restart and uncertain-write recovery.');
  // Lost send response must reconcile the original signed transaction, without another send.
  const before=rpc.control.sends; rpc.control.loseSendResponse=true; rpc.control.hideReceipt=true;
  assert.equal((await request('groups',{name:'Recovered',creatorId:creator,addresses:[addr(2)]})).status,503);
