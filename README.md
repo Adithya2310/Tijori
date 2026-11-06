@@ -32,7 +32,7 @@ Tichori is a treasury for DAOs, teams and families. A payout from the vault need
 ### Architecture
 
 ```
-Vendor app ──@tichori/invoices──► POST /api/v1/invoices ──► invoice inbox (encrypted Arkiv aggregate, vault v4)
+Vendor app ──@tichori/invoices──► POST /api/v1/invoices ──► invoice inbox (encrypted Arkiv aggregate, vault v6)
 Signer ──► POST /api/v1/proposals ──► POST /api/v1/approval-sessions (fixes SafeTx at live nonce, presence challenge)
 Each signer in the room: object check + presence (room code) + own EIP-712 Safe signature ──► POST /api/v1/physical-approvals
 Majority in ONE session ──► verifier signs CoPresence attestation ──► relayer ──► TichoriPresenceGuard.executeWithAttestation
