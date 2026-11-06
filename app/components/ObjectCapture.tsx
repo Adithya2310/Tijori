@@ -1,13 +1,14 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { validDinoFeatures, type DinoFeatures } from '@/lib/dino';
+import CameraCapture from './CameraCapture';
 
 export default function ObjectCapture({ disabled, onFeatures, autoProcess = false, isolate=false }: { disabled: boolean; autoProcess?: boolean; isolate?:boolean; onFeatures: (features: DinoFeatures | null) => void }) {
  const worker = useRef<Worker | null>(null);
  const timeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
  const startupTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
  const generation = useRef(0);
- const [consent, setConsent] = useState(false), [image, setImage] = useState<File | null>(null);
+ const [consent, setConsent] = useState(false), [image, setImage] = useState<Blob | null>(null);
  const [running, setRunning] = useState(false), [status, setStatus] = useState(''), [error, setError] = useState(''), [engineNote, setEngineNote] = useState('');
  const [preview, setPreview] = useState('');
  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
@@ -17,7 +18,7 @@ export default function ObjectCapture({ disabled, onFeatures, autoProcess = fals
   generation.current++; stopWorker(); clearTimeout(timeout.current);
   setRunning(false); setStatus(''); setError(''); setEngineNote(''); onFeatures(null);
  }
- function process(selectedImage: File | null = image, point?: {x:number;y:number}) {
+ function process(selectedImage: Blob | null = image, point?: {x:number;y:number}) {
   if (!selectedImage || !consent || running || disabled) return;
   const image = selectedImage;
   reset(); const attempt = ++generation.current;
@@ -50,7 +51,7 @@ export default function ObjectCapture({ disabled, onFeatures, autoProcess = fals
     finish(await extractObjectFeatures(image, progress, () => !current(),point));
    } catch (error) {
     const detail = error instanceof Error ? error.message.slice(0, 400) : 'Unknown runtime error';
-    fail(`On-device processing failed: ${detail}. Worker startup: ${reason.slice(0, 180)}. Check your connection and try a smaller JPEG or PNG.`);
+    fail(`On-device processing failed: ${detail}. Worker startup: ${reason.slice(0, 180)}. Check your connection and retake the photo.`);
    }
   };
   armDeadline();
@@ -73,13 +74,11 @@ export default function ObjectCapture({ disabled, onFeatures, autoProcess = fals
   <legend>Personal object · DINOv2</legend>
   <p className="form-hint">Use a tightly framed photo in good light. Photos can be replayed; this experimental match does not prove ownership or identity.</p>
   <label className="object-consent"><input type="checkbox" checked={consent} onChange={event => { reset(); setConsent(event.target.checked); }}/><span>Process my photo on this device. Load the model from this app; my photo stays in this browser.</span></label>
-  <label>Choose a photo or take one<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" disabled={!consent || running} onChange={event => {
-   reset(); const file = event.target.files?.[0]; setImage(null); setPreview(''); if (!file) return;
-   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) { event.target.value = ''; setError('Choose a JPEG, PNG or WebP image under 10 MB.'); return; }
-   setImage(file);
-   setPreview(URL.createObjectURL(file));
-   if (autoProcess&&!isolate) process(file);
-  }}/></label>
+  <p className="form-hint">Take a fresh photo with your camera. Gallery selection and image-file uploads are not available.</p>
+  {consent && !disabled && !running && <CameraCapture onStart={() => { reset(); setImage(null); setPreview(''); }} onCapture={photo => {
+   setImage(photo); setPreview(URL.createObjectURL(photo));
+   if (autoProcess && !isolate) process(photo);
+  }}/>}
   {/* Photo preview is a local blob URL, never an image optimizer/server request. */}
   {/* eslint-disable-next-line @next/next/no-img-element */}
   {preview && <button type="button" className="object-isolation-photo" disabled={running||!consent||!isolate} onClick={event=>{if(event.detail===0){process(image,{x:0.5,y:0.5});return;}const img=event.currentTarget.querySelector('img')!;const r=img.getBoundingClientRect();const scale=Math.min(r.width/img.naturalWidth,r.height/img.naturalHeight);const w=img.naturalWidth*scale,h=img.naturalHeight*scale;const x=(event.clientX-r.left-(r.width-w)/2)/w,y=(event.clientY-r.top-(r.height-h)/2)/h;if(x>=0&&x<=1&&y>=0&&y<=1)process(image,{x,y});}}><img className="object-preview" src={preview} alt="Tap the object to isolate it and scan locally"/></button>}
