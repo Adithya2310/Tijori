@@ -2,6 +2,10 @@
   "name": "tijori-example-vendor-studio",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node server.mjs" },
-  "dependencies": { "@tijori/invoices": "0.0.0" }
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@tijori/invoices": "0.1.0"
+  }
 }

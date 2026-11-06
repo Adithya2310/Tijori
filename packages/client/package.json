@@ -1,5 +1,5 @@
 {
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "license": "MIT",
   "author": "Tijori contributors",
@@ -42,7 +42,7 @@
   ],
   "sideEffects": false,
   "dependencies": {
-    "@tijori/core": "0.0.0",
+    "@tijori/core": "0.1.0",
     "@huggingface/transformers": "4.3.2",
     "@anon-rpc/browser-harness": "^0.4.0"
   },

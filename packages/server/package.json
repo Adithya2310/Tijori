@@ -1,5 +1,5 @@
 {
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "license": "MIT",
   "author": "Tijori contributors",
@@ -19,27 +19,27 @@
   "description": "Self-hosted Tijori backend: co-present Whitechain treasury, object identities and acoustic attendance as a fetch handler with Next.js and Node adapters.",
   "exports": {
     ".": {
-      "browser": "./dist/browser-guard.js",
       "@tijori/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
+      "browser": "./dist/browser-guard.js",
       "default": "./dist/index.js"
     },
     "./next": {
-      "browser": "./dist/browser-guard.js",
       "@tijori/source": "./src/next.ts",
       "types": "./dist/next.d.ts",
+      "browser": "./dist/browser-guard.js",
       "default": "./dist/next.js"
     },
     "./node": {
-      "browser": "./dist/browser-guard.js",
       "@tijori/source": "./src/node.ts",
       "types": "./dist/node.d.ts",
+      "browser": "./dist/browser-guard.js",
       "default": "./dist/node.js"
     },
     "./*": {
-      "browser": "./dist/browser-guard.js",
       "@tijori/source": "./src/*.ts",
       "types": "./dist/*.d.ts",
+      "browser": "./dist/browser-guard.js",
       "default": "./dist/*.js"
     }
   },
@@ -53,7 +53,7 @@
     "LICENSE"
   ],
   "dependencies": {
-    "@tijori/core": "0.0.0",
+    "@tijori/core": "0.1.0",
     "@arkiv-network/sdk": "1.0.1",
     "@safe-global/protocol-kit": "^8.0.11",
     "@safe-global/safe-deployments": "^1.37.67"

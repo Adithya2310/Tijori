@@ -1,0 +1,54 @@
+name: Release
+
+# Builds and tests on every push to main, then publishes the @tijori/* packages with Changesets:
+# - pending changesets  -> opens or updates a "Version Tijori packages" pull request;
+# - versions not on npm -> publishes them with npm provenance.
+# Publishing runs only when the NPM_TOKEN repository secret is set (Settings → Secrets and variables → Actions).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: release-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write # npm provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Cache pinned model assets
+        uses: actions/cache@v4
+        with:
+          path: public/tijori-assets
+          key: tijori-assets-${{ hashFiles('packages/client/src/cli/prepare-assets.ts', 'packages/core/src/dino.ts', 'package-lock.json') }}
+      - run: npm run build:packages
+      - run: npm run build # prebuild prepares and checksum-verifies the model assets
+      - run: npm test
+      - name: Skip publishing without NPM_TOKEN
+        if: env.NPM_TOKEN == ''
+        run: echo "::notice::NPM_TOKEN is not set, so nothing was published."
+      - name: Version or publish
+        if: env.NPM_TOKEN != ''
+        uses: changesets/action@v1
+        with:
+          version: npx changeset version
+          publish: npm run release
+          title: Version Tijori packages
+          commit: Version Tijori packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true

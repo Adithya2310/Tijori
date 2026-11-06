@@ -24,3 +24,4 @@ whitechain.md
 
 # Built SDK packages
 packages/*/dist/
+packages/*/.tsbuildinfo

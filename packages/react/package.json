@@ -1,5 +1,5 @@
 {
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "license": "MIT",
   "author": "Tijori contributors",
@@ -40,8 +40,8 @@
     "**/*.css"
   ],
   "dependencies": {
-    "@tijori/core": "0.0.0",
-    "@tijori/client": "0.0.0",
+    "@tijori/core": "0.1.0",
+    "@tijori/client": "0.1.0",
     "lucide-react": "^1.69.0"
   },
   "peerDependencies": {
