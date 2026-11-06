@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { createServer } from 'node:net';
 import { createServer as createHttpsServer } from 'node:https';
 import { lanAddresses } from '../lib/local-network.mjs';
+import { prepareDinoAssets } from './prepare-dino-assets.mjs';
 
 const port = Number(process.env.TICHORI_PHONE_PORT || 3443);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw Error('TICHORI_PHONE_PORT must be an integer between 1024 and 65535.');
@@ -14,6 +15,7 @@ await new Promise((resolveReady,reject) => {
 }).catch(error => {console.error(`Cannot start phone server on port ${port}: ${error.message}`);process.exit(1);});
 
 const addresses = lanAddresses();
+await prepareDinoAssets();
 const directory = resolve('.local-https');
 mkdirSync(directory,{recursive:true,mode:0o700});
 const key = resolve(directory,'key.pem'), cert = resolve(directory,'cert.pem');

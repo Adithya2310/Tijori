@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
-import { withArkiv, StorageError } from '@/lib/db';
+import { withState, StorageError } from '@/lib/db';
 import { VaultError } from '@/lib/vault';
 import { applyProximity, latestSession, proximityMember, sessionView } from '@/lib/proximity';
 export const runtime = 'nodejs';
@@ -11,7 +11,7 @@ const failure = (e: unknown) => json({ error: e instanceof StorageError || e ins
 export async function GET(req: NextRequest) {
  try {
   const groupId = text(req.nextUrl.searchParams.get('groupId')), walletId = text(req.nextUrl.searchParams.get('walletId'));
-  return await withArkiv(async store => {
+  return await withState(async store => {
    const { vault } = await store.read();
    proximityMember(vault, groupId, walletId);
    return json({ session: sessionView(latestSession(vault, groupId)) });
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new VaultError('Expected a request object.');
   const operationId = req.headers.get('idempotency-key') || randomUUID();
   if (!/^[\w-]{1,100}$/.test(operationId)) throw new VaultError('Invalid operation ID.');
-  return await withArkiv(async store => {
+  return await withState(async store => {
    const previous = await store.read();
    const { changed, ...result } = applyProximity(previous.vault, body, operationId);
    if (changed) await store.write(previous.vault, previous);

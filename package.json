@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test tests/*.test.ts tests/modem.test.mjs tests/network.test.mjs && node tests/flow.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/modem.test.mjs tests/network.test.mjs && node tests/flow.mjs && node tests/local-flow.mjs",
     "arkiv:check": "node --experimental-strip-types scripts/arkiv.ts check",
     "arkiv:migrate": "node --experimental-strip-types scripts/arkiv.ts migrate",
     "arkiv:verify": "node --experimental-strip-types scripts/arkiv.ts verify-write",

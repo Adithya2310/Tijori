@@ -11,7 +11,7 @@ function fixture() {
  applyAction(v, 'groups', {name:'Family',creatorId:ids[0],addresses:[address(2)]});
  return {v,ids,groupId:v.groups[0].id};
 }
-test('v3 upgrade preserves all records and adds empty proximity state; encrypted v4 roundtrip preserves sessions', () => {
+test('v3 upgrade preserves all records and adds empty proximity state; encrypted v5 roundtrip preserves sessions', () => {
  const {v,ids,groupId} = fixture();
  const old: Record<string, unknown> = structuredClone(v);
  delete old.proximitySessions;

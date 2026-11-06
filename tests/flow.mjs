@@ -14,7 +14,7 @@ const dir = await mkdtemp(join(tmpdir(), 'privacy-vault-test-'));
 const port = 3178;
 const rpc = await rpcFixture();
 const privateKey = '0x' + '11'.repeat(32);
-const env = { ...process.env, VAULT_DATA_DIR: dir, ARKIV_ACCESS_KEY: 'fixture', ARKIV_WALLET_PRIVATE_KEY: privateKey, ARKIV_WALLET_ADDRESS: privateKeyToAccount(privateKey).address, ARKIV_STATE_ENCRYPTION_KEY: '22'.repeat(32), ARKIV_NAMESPACE: 'fixture', ARKIV_MAX_TOTAL_FEE_TGLM: '0.1', NODE_OPTIONS: `--import=${pathToFileURL(resolve('tests/rpc-preload.mjs')).href}`, TICHORI_FIXTURE_URL: rpc.url };
+const env = { ...process.env, TICHORI_STORAGE_MODE: 'arkiv', VAULT_DATA_DIR: dir, ARKIV_ACCESS_KEY: 'fixture', ARKIV_WALLET_PRIVATE_KEY: privateKey, ARKIV_WALLET_ADDRESS: privateKeyToAccount(privateKey).address, ARKIV_STATE_ENCRYPTION_KEY: '22'.repeat(32), ARKIV_NAMESPACE: 'fixture', ARKIV_MAX_TOTAL_FEE_TGLM: '0.1', NODE_OPTIONS: `--import=${pathToFileURL(resolve('tests/rpc-preload.mjs')).href}`, TICHORI_FIXTURE_URL: rpc.url };
 let server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port)], { env, stdio: 'ignore' });
 const base = `http://localhost:${port}/api/`;
 async function request(path, body, headers = {}) {

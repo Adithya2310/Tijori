@@ -21,7 +21,7 @@ test('read-only SQLite import preserves existing identities, relationships and a
    INSERT INTO transactions VALUES('tx','group','alice','demo',1,'ETH','','pending','now');
    INSERT INTO approvals VALUES('tx','alice');`);
   const before=readSqliteVault(path);
-  assert.equal(before.version,4);assert.deepEqual(before.proximitySessions,[]);
+  assert.equal(before.version,5);assert.deepEqual(before.proximitySessions,[]);
   db.exec(`CREATE TABLE proximity_sessions(id TEXT,group_id TEXT,host_id TEXT,nonce TEXT,created_at INTEGER,expires_at INTEGER,cancelled INTEGER);
    CREATE TABLE proximity_matches(session_id TEXT,wallet_id TEXT,verified_at INTEGER,attestation_hash TEXT);
    INSERT INTO proximity_sessions VALUES('session','group','alice','ABC123',1000,121000,1);`);
