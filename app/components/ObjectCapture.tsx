@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { validDinoFeatures, type DinoFeatures } from '@/lib/dino';
+import { validDinoFeatures, type DinoFeatures } from '@tijori/core/dino';
 import CameraCapture from './CameraCapture';
 
 export default function ObjectCapture({ disabled, onFeatures, autoProcess = false, isolate=false }: { disabled: boolean; autoProcess?: boolean; isolate?:boolean; onFeatures: (features: DinoFeatures | null) => void }) {

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { IDBFactory } from 'fake-indexeddb';
 import { listDeviceIdentities, saveDeviceIdentity, validateDeviceIdentity } from '../lib/device-identities.ts';
-import { featuresFromTokens } from '../lib/dino.ts';
+import { featuresFromTokens } from '@tijori/core/dino';
 import { createObjectIdentity, verifyObjectRecovery } from '../lib/dino-wallet.ts';
 
 test('remembered identity survives reopening storage, reuses a pending key, and rejects the wrong object', async () => {

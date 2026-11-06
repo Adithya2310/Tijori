@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { validateVault, type Vault } from '../vault.ts';
+import { validateVault, type Vault } from '@tijori/core/vault';
 export const MAX_STATE_BYTES = 100_000;
 export function encryptState(vault: Vault, key: Buffer, context: string): Buffer {
  const plain = Buffer.from(JSON.stringify(validateVault(vault)));

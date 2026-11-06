@@ -1,6 +1,6 @@
 import { isAddress } from 'viem';
 import { applyAction, publicState, VaultError, type Vault } from '../vault.ts';
-import type { Evidence, IntegrationProviders } from '../integrations/contracts.ts';
+import type { Evidence, IntegrationProviders } from '../integrations.ts';
 
 export const requiredApprovals = (members: number) => Math.floor(members / 2) + 1;
 export function evidenceFrom(value: unknown): Evidence | undefined {

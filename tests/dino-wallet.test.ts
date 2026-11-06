@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { featuresFromTokens } from '../lib/dino.ts';
+import { featuresFromTokens } from '@tijori/core/dino';
 import { createObjectIdentity, parseObjectRecovery, verifyObjectRecovery, unlockObjectIdentity, DINO_OBJECT_NAME } from '../lib/dino-wallet.ts';
-import { applyAction, emptyVault, publicState, validateVault } from '../lib/vault.ts';
+import { applyAction, emptyVault, publicState, validateVault } from '@tijori/core/vault';
 
 function photo(axis: number) {
  const values = new Float32Array(257 * 384);

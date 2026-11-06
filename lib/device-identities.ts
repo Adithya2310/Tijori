@@ -43,6 +43,6 @@ export async function listServerIdentities(): Promise<DeviceIdentity[]> {
  const response=await fetch('/api/object-identities',{cache:'no-store'});
  const result=await response.json();
  if(!response.ok)throw Error(result.error||'Could not retrieve stored identities.');
- const {unpackObjectProfile}=await import('./object-profile.ts');
- return result.identities.map((record: {name:string;address:string;keyEnvelope:ObjectRecovery['keyEnvelope'];objectProfile:import('./object-profile.ts').ObjectProfile})=>validateDeviceIdentity({version:1,name:record.name,status:'registered',recovery:{version:1,kind:'tichori-insecure-object-demo',address:record.address,keyEnvelope:record.keyEnvelope,objectProfile:record.objectProfile,features:unpackObjectProfile(record.objectProfile)}}));
+ const {unpackObjectProfile}=await import('@tijori/core/object-profile');
+ return result.identities.map((record: {name:string;address:string;keyEnvelope:ObjectRecovery['keyEnvelope'];objectProfile:import('@tijori/core/object-profile').ObjectProfile})=>validateDeviceIdentity({version:1,name:record.name,status:'registered',recovery:{version:1,kind:'tichori-insecure-object-demo',address:record.address,keyEnvelope:record.keyEnvelope,objectProfile:record.objectProfile,features:unpackObjectProfile(record.objectProfile)}}));
 }

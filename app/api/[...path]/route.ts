@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { StorageError } from '@/lib/db';
-import { VaultError } from '@/lib/vault';
-import { IntegrationUnavailableError } from '@/lib/integrations/contracts';
+import { VaultError } from '@tijori/core/vault';
+import { IntegrationUnavailableError } from '@tijori/core/integrations';
 import { balance, capabilities, mutate, prepareDeployment, queryWorkflow, readState, readObjectIdentities, verifyExternalApproval } from '@/lib/api/service';
 import { approveInSession, AuthError, createWhitechainVault, issueInboxKey, listApprovalSessions, proposePayout, relayerStatus, startApprovalSession, treasuryExport, vendorCreateInvoice, vendorGetInvoice, vendorRemind } from '@/lib/api/treasury';
 export const runtime = 'nodejs';

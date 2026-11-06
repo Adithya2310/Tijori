@@ -2,7 +2,7 @@ import nextEnv from '@next/env';
 import { readSqliteVault } from '../lib/arkiv/migrate-sqlite.ts';
 import { join } from 'node:path';
 import { withArkiv, StorageError } from '../lib/arkiv/store.ts';
-import { validateVault } from '../lib/vault.ts';
+import { validateVault } from '@tijori/core/vault';
 nextEnv.loadEnvConfig(process.cwd());
 const mode = process.argv[2];
 try {

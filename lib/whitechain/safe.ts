@@ -1,8 +1,8 @@
 import 'server-only';
 import { getAddress, type Address } from 'viem';
-import { SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID } from './chain.ts';
+import { SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID } from '@tijori/core/whitechain/chain';
 import { assertWhitechain, usdtAddress, whitechainClient } from './config.ts';
-import { erc20Abi, safeAbi } from './safe-tx.ts';
+import { erc20Abi, safeAbi } from '@tijori/core/whitechain/safe-tx';
 
 /** Live Safe status on Whitechain Sepolia: owners, threshold, nonce, guard, WBT and USDT balances. */
 export async function readWhitechainSafe(address: Address) {

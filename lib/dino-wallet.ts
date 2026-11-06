@@ -1,6 +1,6 @@
-import { validObjectProfile, unpackObjectProfile, type ObjectProfile } from './object-profile.ts';
-import { compareDinoFeatures, validDinoFeatures, type DinoFeatures } from './dino.ts';
-import { generateIdentity, unlockIdentity, unlockIdentityAccount, validKeyEnvelope, type KeyEnvelope } from './identity-key.ts';
+import { validObjectProfile, unpackObjectProfile, type ObjectProfile } from '@tijori/core/object-profile';
+import { compareDinoFeatures, validDinoFeatures, type DinoFeatures } from '@tijori/core/dino';
+import { generateIdentity, unlockIdentity, unlockIdentityAccount, validKeyEnvelope, type KeyEnvelope } from '@tijori/core/identity-key';
 
 export const DINO_OBJECT_NAME = 'dino-object-demo-v1';
 export type ObjectRecovery = { version: 1; kind: 'tichori-insecure-object-demo'; address: string; keyEnvelope: KeyEnvelope; features: DinoFeatures; objectProfile?: ObjectProfile };

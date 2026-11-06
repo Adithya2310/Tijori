@@ -2,14 +2,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowUpRight, AudioLines, Check, CheckCircle2, Copy, Download, FileText, Fuel, Radio, ScanLine, ShieldCheck, Users, Wallet, X } from 'lucide-react';
 import { tichori, type ApplicationState, type ApprovalSession, type RelayerStatus, type SafeStatus } from '@/lib/api/client';
-import { unlockIdentityAccount, type KeyEnvelope } from '@/lib/identity-key';
+import { unlockIdentityAccount, type KeyEnvelope } from '@tijori/core/identity-key';
 import { sessionSigner, setSessionSigner } from '@/lib/session-signer';
-import { explorerAddress, explorerTx, formatUsdt } from '@/lib/whitechain/chain';
-import { inboxKeyMessage, safeTxTypedData } from '@/lib/whitechain/safe-tx';
+import { explorerAddress, explorerTx, formatUsdt } from '@tijori/core/whitechain/chain';
+import { inboxKeyMessage, safeTxTypedData } from '@tijori/core/whitechain/safe-tx';
 import ObjectCapture from './components/ObjectCapture';
 import { DINO_OBJECT_NAME, unlockObjectIdentityAccount, verifyObjectRecovery, type ObjectRecovery } from '@/lib/dino-wallet';
 import { listDeviceIdentities, listServerIdentities } from '@/lib/device-identities';
-import type { DinoFeatures } from '@/lib/dino';
+import type { DinoFeatures } from '@tijori/core/dino';
 
 type Group = ApplicationState['groups'][number];
 type Identity = { id: string; name: string; address: string | null };

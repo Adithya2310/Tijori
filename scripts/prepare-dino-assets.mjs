@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
-import { DINO_MODEL, DINO_REVISION, DINO_RUNTIME_VERSION } from '../lib/dino.ts';
+import { DINO_MODEL, DINO_REVISION, DINO_RUNTIME_VERSION } from '@tijori/core/dino';
 
 // Public model artifacts only. Never copy env files, recovery files or application state.
 export const modelFiles = [

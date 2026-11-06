@@ -1,9 +1,9 @@
 // Pure treasury domain rules over the vault aggregate. No I/O; callers persist through withState (Arkiv or local storage).
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from '../random.ts';
 import { getAddress, isAddress } from 'viem';
+import { isNonPublicHostname } from '../net.ts';
 import { VaultError, type Invoice, type Proposal, type Vault } from '../vault.ts';
 import { explorerTx, formatUsdt, parseUsdt } from './chain.ts';
-import { isNonPublicHostname } from './net-guard.ts';
 
 const str = (x: unknown, max = 500) => (typeof x === 'string' ? x.trim() : '').slice(0, max);
 const fail = (message: string): never => { throw new VaultError(message); };

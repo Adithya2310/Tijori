@@ -1,7 +1,7 @@
 import 'server-only';
 import { withArkiv, StorageError } from './arkiv/store.ts';
 import { withLocalStore } from './local-store.ts';
-import type { StateStore } from './state-store.ts';
+import type { StateStore } from '@tijori/core/state-store';
 export { StorageError };
 export function storageMode(): 'local' | 'arkiv' {
  const mode = process.env.TICHORI_STORAGE_MODE || 'arkiv';

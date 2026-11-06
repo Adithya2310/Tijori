@@ -1,5 +1,5 @@
 import { pipeline, env, RawImage, type ImageFeatureExtractionPipeline } from '@huggingface/transformers';
-import { DINO_MODEL, DINO_REVISION, DINO_RUNTIME_VERSION, featuresFromTokens } from './dino';
+import { DINO_MODEL, DINO_REVISION, DINO_RUNTIME_VERSION, featuresFromTokens } from '@tijori/core/dino';
 
 // Shared by the worker and browser-page fallback. Never used by server routes.
 env.allowLocalModels = false;

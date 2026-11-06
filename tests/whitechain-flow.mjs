@@ -12,7 +12,7 @@ import { createPublicClient, createWalletClient, getAddress, http, parseEther } 
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { whitechainSepolia } from 'viem/chains';
 import { rpcFixture } from './rpc-fixture.mjs';
-import { erc20Abi, inboxKeyMessage, packSignatures, safeAbi, safeTxTypedData } from '../lib/whitechain/safe-tx.ts';
+import { erc20Abi, inboxKeyMessage, packSignatures, safeAbi, safeTxTypedData } from '@tijori/core/whitechain/safe-tx';
 import { verifyWebhook } from '@tijori/invoices';
 
 if (spawnSync('anvil', ['--version']).error) { console.log('Skipped Whitechain flow: Foundry anvil is not installed.'); process.exit(0); }

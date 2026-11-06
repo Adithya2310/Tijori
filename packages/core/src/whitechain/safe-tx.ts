@@ -1,5 +1,6 @@
 // Pure Safe/guard encoding helpers shared by the browser, the server and tests. No secrets here.
 import { concat, encodeAbiParameters, encodeFunctionData, getAddress, getContractAddress, keccak256, parseAbi, stringToBytes, zeroAddress, type Address, type Hex } from 'viem';
+import { LEGACY_GUARD_DOMAIN_NAME, LEGACY_INBOX_KEY_MESSAGE_PREFIX } from '../legacy.ts';
 
 export const safeAbi = parseAbi([
  'function getTransactionHash(address to, uint256 value, bytes data, uint8 operation, uint256 safeTxGas, uint256 baseGas, uint256 gasPrice, address gasToken, address refundReceiver, uint256 _nonce) view returns (bytes32)',
@@ -53,7 +54,7 @@ export const attestationTypes = {
  ],
 } as const;
 export function attestationTypedData(chainId: number, guard: Address, attestation: Attestation) {
- return { domain: { name: 'TichoriPresenceGuard', version: '1', chainId, verifyingContract: getAddress(guard) }, types: attestationTypes, primaryType: 'CoPresence' as const, message: attestation };
+ return { domain: { name: LEGACY_GUARD_DOMAIN_NAME, version: '1', chainId, verifyingContract: getAddress(guard) }, types: attestationTypes, primaryType: 'CoPresence' as const, message: attestation };
 }
 
 export const majority = (owners: number) => Math.floor(owners / 2) + 1;
@@ -77,4 +78,4 @@ export const sortAddresses = (list: Address[]) => [...list].map(a => getAddress(
 export const idToBytes32 = (id: string) => keccak256(stringToBytes(id));
 export const usdtTransferData = (to: Address, amount: bigint) => encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [getAddress(to), amount] });
 /** EIP-191 message a vault member signs with their identity key to be issued the vault's inbox key. */
-export const inboxKeyMessage = (vaultId: string, identityId: string, issuedAt: string) => `Tichori: issue the invoice inbox key\nvault: ${vaultId}\nidentity: ${identityId}\nissued: ${issuedAt}`;
+export const inboxKeyMessage = (vaultId: string, identityId: string, issuedAt: string) => `${LEGACY_INBOX_KEY_MESSAGE_PREFIX}\nvault: ${vaultId}\nidentity: ${identityId}\nissued: ${issuedAt}`;

@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { emptyVault, applyAction, publicState, validateVault } from '../lib/vault.ts';
-import { generateIdentity, unlockIdentity } from '../lib/identity-key.ts';
+import { emptyVault, applyAction, publicState, validateVault } from '@tijori/core/vault';
+import { generateIdentity, unlockIdentity } from '@tijori/core/identity-key';
 const addr = (n: number) => '0x' + n.toString(16).padStart(40, '0');
 const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
 import { encryptState, decryptState } from '../lib/arkiv/codec.ts';

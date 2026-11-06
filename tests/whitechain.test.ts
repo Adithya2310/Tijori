@@ -2,11 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { hashTypedData, recoverTypedDataAddress } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { applyAction, emptyVault, publicState, validateVault, type Vault } from '../lib/vault.ts';
-import { formatUsdt, parseUsdt } from '../lib/whitechain/chain.ts';
-import { createInvoice, createProposal, recordExecution, remindInvoice, treasuryCsv } from '../lib/whitechain/domain.ts';
+import { applyAction, emptyVault, publicState, validateVault, type Vault } from '@tijori/core/vault';
+import { formatUsdt, parseUsdt } from '@tijori/core/whitechain/chain';
+import { createInvoice, createProposal, recordExecution, remindInvoice, treasuryCsv } from '@tijori/core/whitechain/domain';
 import { deriveMasterKey, inboxKeyFor, signWebhook, verifyInboxKey, webhookSecretFor } from '../lib/whitechain/keys.ts';
-import { attestationTypedData, packSignatures, safeTxTypedData, sortAddresses } from '../lib/whitechain/safe-tx.ts';
+import { attestationTypedData, packSignatures, safeTxTypedData, sortAddresses } from '@tijori/core/whitechain/safe-tx';
 import { verifyWebhook } from '@tijori/invoices';
 
 const addr = (n: number) => '0x' + n.toString(16).padStart(40, '0');

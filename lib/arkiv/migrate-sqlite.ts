@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { emptyVault, validateVault, type Wallet, type Group, type Transaction } from '../vault.ts';
+import { emptyVault, validateVault, type Wallet, type Group, type Transaction } from '@tijori/core/vault';
 
 // Read-only import. Validation and Arkiv writes happen before reporting migration success.
 export function readSqliteVault(path: string) {

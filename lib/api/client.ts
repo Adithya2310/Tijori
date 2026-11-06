@@ -1,6 +1,6 @@
-import type { applicationState } from './domain.ts';
-import type { Evidence, Verification } from '../integrations/contracts.ts';
-import type { KeyEnvelope } from '../identity-key.ts';
+import type { applicationState } from '@tijori/core/api/domain';
+import type { Evidence, Verification } from '@tijori/core/integrations';
+import type { KeyEnvelope } from '@tijori/core/identity-key';
 import type { PendingSafe } from '../safe-client.ts';
 import type { listApprovalSessions, relayerStatus, startApprovalSession, issueInboxKey } from './treasury.ts';
 

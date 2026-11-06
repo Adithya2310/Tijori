@@ -1,5 +1,5 @@
 // Shared, non-secret Whitechain constants. Safe to import from client and server code.
-import { getAddress } from 'viem';
+import { getAddress, type Chain } from 'viem';
 import { baseSepolia, whitechainSepolia } from 'viem/chains';
 
 export const WHITECHAIN_CHAIN_ID = 1874;
@@ -19,10 +19,11 @@ export const SAFE_141 = {
 export const SAFE_GUARD_SLOT = '0x4a204f620c8c5ccdca3fd54d003badd85ba500436a431f0cbda4f558c93c34c8' as const;
 
 export type SafeChainId = typeof LEGACY_SAFE_CHAIN_ID | typeof WHITECHAIN_CHAIN_ID;
-export const SAFE_NETWORKS = {
+export type SafeNetwork = { chain: Chain; label: string; safePrefix: string; gasSymbol: string; explorer: string };
+export const SAFE_NETWORKS: Record<SafeChainId, SafeNetwork> = {
  [LEGACY_SAFE_CHAIN_ID]: { chain: baseSepolia, label: 'Base Sepolia', safePrefix: 'basesep', gasSymbol: 'ETH', explorer: 'https://sepolia.basescan.org' },
  [WHITECHAIN_CHAIN_ID]: { chain: whitechainSepolia, label: 'Whitechain Sepolia', safePrefix: 'wch-sepolia', gasSymbol: 'WBT', explorer: WHITECHAIN_EXPLORER },
-} as const;
+};
 export const isSafeChainId = (value: unknown): value is SafeChainId => value === LEGACY_SAFE_CHAIN_ID || value === WHITECHAIN_CHAIN_ID;
 export const explorerTx = (hash: string) => `${WHITECHAIN_EXPLORER}/tx/${hash}`;
 export const explorerAddress = (address: string) => `${WHITECHAIN_EXPLORER}/address/${address}`;

@@ -2,15 +2,15 @@ import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { formatEther, isAddress } from 'viem';
 import { withState, storageMode, StorageError } from '../db.ts';
-import { publicState, VaultError, type Vault } from '../vault.ts';
+import { publicState, VaultError, type Vault } from '@tijori/core/vault';
 import { normalizeOwners, prepareSafe, SAFE_CHAIN_ID, verifySafeDeployment, readSafeStatus } from '../safe.ts';
 import { providers } from '../integrations/providers.ts';
 import { readWhitechainSafe } from '../whitechain/safe.ts';
 import { isRehearsalToken } from '../whitechain/config.ts';
-import { formatUsdt } from '../whitechain/chain.ts';
-import { IntegrationUnavailableError } from '../integrations/contracts.ts';
+import { formatUsdt } from '@tijori/core/whitechain/chain';
+import { IntegrationUnavailableError } from '@tijori/core/integrations';
 import { treasuryCapabilities } from './treasury.ts';
-import { actionIdentity, applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from './domain.ts';
+import { actionIdentity, applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from '@tijori/core/api/domain';
 
 export function capabilities() {
  return {

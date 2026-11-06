@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyAction, emptyVault } from '../lib/vault.ts';
-import { applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from '../lib/api/domain.ts';
+import { applyAction, emptyVault } from '@tijori/core/vault';
+import { applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from '@tijori/core/api/domain';
 import { providers } from '../lib/integrations/providers.ts';
-import type { IntegrationProviders } from '../lib/integrations/contracts.ts';
+import type { IntegrationProviders } from '@tijori/core/integrations';
 import { createTichoriClient } from '../lib/api/client.ts';
 
 const address = (n: number) => '0x' + n.toString(16).padStart(40, '0');

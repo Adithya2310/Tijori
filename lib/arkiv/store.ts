@@ -9,7 +9,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { emptyVault, VaultError, type Vault } from '../vault.ts';
+import { emptyVault, VaultError, type Vault } from '@tijori/core/vault';
 import { encryptState, decryptState } from './codec.ts';
 
 const State = defineSchema('tichori_state_v1', { namespace: str().indexed(), revision: u64(), encoding: str(), ciphertext: bytes() });

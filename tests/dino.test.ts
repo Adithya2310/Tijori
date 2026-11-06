@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { featuresFromTokens, compareDinoFeatures, validDinoFeatures, DINO_DIMENSIONS, DINO_PATCHES } from '../lib/dino.ts';
+import { featuresFromTokens, compareDinoFeatures, validDinoFeatures, DINO_DIMENSIONS, DINO_PATCHES } from '@tijori/core/dino';
 
 function features(axis: number) {
  const tokens = new Float32Array((DINO_PATCHES + 1) * DINO_DIMENSIONS);

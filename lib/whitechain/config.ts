@@ -3,8 +3,8 @@ import { createPublicClient, getAddress, http, isAddress, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts';
 import { whitechainSepolia } from 'viem/chains';
 import { join } from 'node:path';
-import { IntegrationUnavailableError } from '../integrations/contracts.ts';
-import { WHITECHAIN_CHAIN_ID, WHITECHAIN_DEFAULT_RPC, WHITECHAIN_USDT } from './chain.ts';
+import { IntegrationUnavailableError } from '@tijori/core/integrations';
+import { WHITECHAIN_CHAIN_ID, WHITECHAIN_DEFAULT_RPC, WHITECHAIN_USDT } from '@tijori/core/whitechain/chain';
 
 /** Server-only Whitechain configuration. Read at request time so one build can target any RPC. */
 export function whitechainRpcUrl() {

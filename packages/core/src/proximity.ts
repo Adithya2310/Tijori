@@ -1,4 +1,4 @@
-import { createHash, randomInt, randomUUID } from 'node:crypto';
+import { randomInt, randomUUID, sha256Hex } from './random.ts';
 import { VaultError, type Vault } from './vault.ts';
 
 export type ProximitySession = {
@@ -52,7 +52,7 @@ export function applyProximity(vault: Vault, b: Record<string, unknown>, operati
   if (s.hostId === walletId) throw new VaultError('Join from another vault member’s device.');
   if (text(b.nonce) !== s.nonce) throw new VaultError('Heard a different signal. Keep listening near your vault broadcaster.');
   if (s.matches.some(m => m.walletId === walletId)) return { changed: false, session: sessionView(s, now) };
-  const attestationHash = createHash('sha256').update(`${s.id}:${s.nonce}:${s.hostId}:${walletId}:${now}`).digest('hex');
+  const attestationHash = sha256Hex(`${s.id}:${s.nonce}:${s.hostId}:${walletId}:${now}`);
   s.matches.push({ walletId, verifiedAt: now, attestationHash });
  } else throw new VaultError('Unknown proximity action.');
  return { changed: true, session: sessionView(s, now) };

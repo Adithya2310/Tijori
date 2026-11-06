@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import ObjectCapture from './ObjectCapture';
-import { packObjectProfile, unpackObjectProfile, type ObjectProfile } from '@/lib/object-profile';
-import { type DinoFeatures } from '@/lib/dino';
+import { packObjectProfile, unpackObjectProfile, type ObjectProfile } from '@tijori/core/object-profile';
+import { type DinoFeatures } from '@tijori/core/dino';
 import { createObjectIdentity, downloadObjectRecovery, parseObjectRecovery, verifyObjectRecovery, DINO_OBJECT_NAME, type ObjectRecovery } from '@/lib/dino-wallet';
 import { listDeviceIdentities, listServerIdentities, saveDeviceIdentity, type DeviceIdentity } from '@/lib/device-identities';
 

@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { featuresFromTokens, compareDinoFeatures } from '../lib/dino.ts';
-import { packObjectProfile, unpackObjectProfile } from '../lib/object-profile.ts';
+import { featuresFromTokens, compareDinoFeatures } from '@tijori/core/dino';
+import { packObjectProfile, unpackObjectProfile } from '@tijori/core/object-profile';
 import { createObjectIdentity, unlockObjectIdentity } from '../lib/dino-wallet.ts';
-import { applyAction, emptyVault, validateVault, publicState } from '../lib/vault.ts';
+import { applyAction, emptyVault, validateVault, publicState } from '@tijori/core/vault';
 import { encryptState } from '../lib/arkiv/codec.ts';
 test('compact references roundtrip with stable key wrapping and remain private in public state',async()=>{
  const data=new Float32Array(257*384);for(let i=0;i<257;i++)data[i*384]=1;

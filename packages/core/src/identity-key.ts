@@ -1,4 +1,5 @@
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { LEGACY_IDENTITY_AAD_PREFIX } from './legacy.ts';
 
 export type KeyEnvelope = { version: 1; salt: string; iv: string; ciphertext: string };
 const iterations = 600_000;
@@ -14,13 +15,13 @@ export async function generateIdentity(passphrase: string) {
  const address = privateKeyToAccount(privateKey).address.toLowerCase();
  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
  const key = await derive(passphrase, salt);
- const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode('tichori-identity-v1:' + address) }, key, bytes(privateKey.slice(2)));
+ const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(LEGACY_IDENTITY_AAD_PREFIX + address) }, key, bytes(privateKey.slice(2)));
  return { address, keyEnvelope: { version: 1 as const, salt: hex(salt), iv: hex(iv), ciphertext: hex(new Uint8Array(ciphertext)) } };
 }
 async function decryptIdentity(address: string, envelope: KeyEnvelope, passphrase: string) {
  try {
   const key = await derive(passphrase, bytes(envelope.salt));
-  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(envelope.iv), additionalData: new TextEncoder().encode('tichori-identity-v1:' + address.toLowerCase()) }, key, bytes(envelope.ciphertext));
+  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(envelope.iv), additionalData: new TextEncoder().encode(LEGACY_IDENTITY_AAD_PREFIX + address.toLowerCase()) }, key, bytes(envelope.ciphertext));
   const raw = new Uint8Array(plaintext);
   const privateKey = ('0x' + hex(raw)) as `0x${string}`;
   raw.fill(0);

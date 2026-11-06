@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { withState, StorageError } from '@/lib/db';
-import { VaultError } from '@/lib/vault';
-import { applyProximity, latestSession, proximityMember, sessionView } from '@/lib/proximity';
+import { VaultError } from '@tijori/core/vault';
+import { applyProximity, latestSession, proximityMember, sessionView } from '@tijori/core/proximity';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const text = (v: unknown) => typeof v === 'string' ? v.trim() : '';

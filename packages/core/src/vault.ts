@@ -1,8 +1,8 @@
 import { validObjectProfile, unpackObjectProfile, type ObjectProfile } from './object-profile.ts';
 import { validateProximity, type ProximitySession } from './proximity.ts';
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from './random.ts';
 import { isAddress } from 'viem';
-import type { SafeRecord } from './safe.ts';
+import type { SafeRecord } from './types.ts';
 import { validKeyEnvelope, type KeyEnvelope } from './identity-key.ts';
 
 export type Wallet = { id: string; name: string; address: string | null; legacy_id?: string; keyEnvelope?: KeyEnvelope; objectProfile?: ObjectProfile; object_name: string; created_at: string };

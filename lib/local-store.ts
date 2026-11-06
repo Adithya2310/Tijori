@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { durableJson, StorageError } from './arkiv/store.ts';
 import { encryptState, decryptState } from './arkiv/codec.ts';
-import { emptyVault, VaultError } from './vault.ts';
-import type { StateStore } from './state-store.ts';
+import { emptyVault, VaultError } from '@tijori/core/vault';
+import type { StateStore } from '@tijori/core/state-store';
 
 const context = 'tichori-local-acoustic-demo-v1';
 // Explicit opt-in storage, independent of Arkiv credentials, journals and namespaces.

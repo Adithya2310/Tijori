@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import type { IntegrationProviders, PresenceSessionProvider } from './contracts.ts';
-import { IntegrationUnavailableError } from './contracts.ts';
+import type { IntegrationProviders, PresenceSessionProvider } from '@tijori/core/integrations';
+import { IntegrationUnavailableError } from '@tijori/core/integrations';
 
 /** Replace individual providers here; HTTP handlers and UI share these services. */
 export const providers: IntegrationProviders = {

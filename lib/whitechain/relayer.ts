@@ -5,10 +5,10 @@ import { randomBytes } from 'node:crypto';
 import { decodeEventLog, encodeFunctionData, getAddress, keccak256, type Address, type Hex, type TransactionReceipt } from 'viem';
 import { durableJson } from '../arkiv/store.ts';
 import { StorageError } from '../db.ts';
-import { VaultError } from '../vault.ts';
-import { SAFE_141, SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID } from './chain.ts';
+import { VaultError } from '@tijori/core/vault';
+import { SAFE_141, SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID } from '@tijori/core/whitechain/chain';
 import { assertWhitechain, treasuryConfig, whitechainClient } from './config.ts';
-import { factoryAbi, guardAbi, guardedInitializer, majority, predictSafeAddress, safeAbi } from './safe-tx.ts';
+import { factoryAbi, guardAbi, guardedInitializer, majority, predictSafeAddress, safeAbi } from '@tijori/core/whitechain/safe-tx';
 
 export type SessionApproval = { walletId: string; address: Address; signature: Hex; at: string; objectMode: string; presenceMode: string };
 export type Session = {
