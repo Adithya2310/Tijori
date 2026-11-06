@@ -40,9 +40,10 @@ Receipt: /invoice/[id] · webhook invoice.paid (HMAC) · GET /api/v1/treasury/ex
 
 | Item | Address / transaction |
 | --- | --- |
-| TichoriPresenceGuard (verified) | _added after deployment_ |
-| TichoriSafeSetup (verified) | _added after deployment_ |
+| TichoriPresenceGuard | [`0x117919dCBBE5E2Aed227e89dddCa2f68B399B238`](https://explorer.testnet.whitechain.io/address/0x117919dCBBE5E2Aed227e89dddCa2f68B399B238) · [deploy tx](https://explorer.testnet.whitechain.io/tx/0x87389ab1f60015c0b1186d1665b5fe1d185e4a3ba17cb36bf829e42d0d93606f) |
+| TichoriSafeSetup | [`0x6905DC2c7c3cA3b2eC97A209f493e949e5bA0e54`](https://explorer.testnet.whitechain.io/address/0x6905DC2c7c3cA3b2eC97A209f493e949e5bA0e54) · [deploy tx](https://explorer.testnet.whitechain.io/tx/0xb1f64904ba712097f66e659685961136b8f65b5629b0c0e1bdd6f7f3bd1552e0) |
 | First co-present USDT payout | _explorer link added after the first live payout_ |
+| Source verification | Pending: Blockscout returned "Contract verification is temporarily unavailable" at deploy time. Run `npm run verify:contracts` to submit both. |
 | USDT (hackathon token) | [`0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7`](https://explorer.testnet.whitechain.io/address/0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7) |
 
 ### Set up the Whitechain treasury

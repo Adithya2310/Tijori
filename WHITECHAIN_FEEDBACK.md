@@ -18,6 +18,7 @@ Notes from building Tichori, a co-present treasury with guarded Safes paying USD
 - **`eth_getLogs` is capped at 10,000 blocks** (about 2.8 hours at 1-second blocks). The RPC limits table doesn't mention this. We found it from the error, and it changes how you build any event-based ledger or export.
 - **Gas sponsorship has no guidance.** EntryPoints are preinstalled, but the docs don't say whether any bundler or paymaster serves Whitechain Sepolia. Reown's docs say its embedded (email/social) wallets don't work here. Every gasless design is therefore "run your own relayer", and the docs have no recipe for that.
 - **Safe app and Transaction Service support for `wch-sepolia` is hard to confirm** from outside. Safe's API rejected our scripted check, so we built approval collection and execution without depending on the Safe Transaction Service.
+- **Verification outage at deploy time.** Deployment succeeded, but every Blockscout verification submission (from `forge script --verify` and `forge verify-contract`) returned `{"message":"Contract verification is temporarily unavailable."}`. `GET /api/v2/smart-contracts/verification/config` listed no Solidity compiler versions. Verification is a qualification requirement, so a status note for the verifier, or a fallback, would help teams during the event.
 - **Proxy slot mismatch.** The USDT proxy reports `eip1967` in Blockscout, but reading the standard EIP-1967 implementation slot over RPC returned zero for us. That was confusing while checking what we were integrating with.
 
 ## What the docs were missing
