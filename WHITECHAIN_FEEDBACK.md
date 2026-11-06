@@ -1,6 +1,6 @@
 # Whitechain feedback
 
-Notes from building Tichori, a co-present treasury with guarded Safes paying USDT, at ETHGlobal Mumbai 2026.
+Notes from building Tijori (spelled Tichori in the deployed contract names), a co-present treasury with guarded Safes paying USDT, at ETHGlobal Mumbai 2026.
 
 ## What worked well
 

@@ -7,6 +7,8 @@ import type { StorageAdapter, TijoriEvent, TijoriProviders } from './context.ts'
 export type TijoriServerConfig = {
  /** Path prefix the handler is mounted at, e.g. '/api/tijori'. Requests are routed on the remainder. */
  basePath?: string;
+ /** Public invoice receipt page, with `{id}` replaced by the invoice ID. Default '/invoice/{id}'. */
+ receiptPath?: string;
  /** 'arkiv' (default), 'local' (encrypted file on disk) or a custom StorageAdapter (e.g. memoryStorage()). */
  storage?: 'arkiv' | 'local' | StorageAdapter;
  /** Persistent data directory for journals and locks (must be shared by every process using the same keys). */
@@ -40,6 +42,7 @@ export function toSettings(config: TijoriServerConfig): Record<string, string | 
  const w = config.whitechain ?? {}, a = config.arkiv ?? {};
  const structured: Record<string, string | undefined> = {
   TIJORI_STORAGE_MODE: typeof config.storage === 'string' ? config.storage : undefined,
+  TIJORI_BASE_PATH: config.basePath, TIJORI_RECEIPT_PATH: config.receiptPath,
   VAULT_DATA_DIR: config.dataDir, LOCAL_DEMO_DATA_DIR: config.localDataDir,
   ARKIV_ACCESS_KEY: a.accessKey, ARKIV_WALLET_PRIVATE_KEY: a.walletPrivateKey, ARKIV_WALLET_ADDRESS: a.walletAddress,
   ARKIV_STATE_ENCRYPTION_KEY: a.stateEncryptionKey, ARKIV_NAMESPACE: a.namespace, ARKIV_MAX_TOTAL_FEE_TGLM: a.maxTotalFeeTglm,

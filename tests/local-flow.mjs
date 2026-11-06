@@ -4,9 +4,9 @@ import { mkdtemp, readFile, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const directory = await mkdtemp(join(tmpdir(), 'tichori-local-flow-'));
+const directory = await mkdtemp(join(tmpdir(), 'tijori-local-flow-'));
 const port = 3186, base = `http://127.0.0.1:${port}/api/`;
-const env = { ...process.env, TICHORI_STORAGE_MODE: 'local', LOCAL_DEMO_DATA_DIR: directory, ARKIV_ACCESS_KEY: '', ARKIV_WALLET_PRIVATE_KEY: 'invalid-local-test', ARKIV_MAX_TOTAL_FEE_TGLM: '0' };
+const env = { ...process.env, TIJORI_STORAGE_MODE: 'local', LOCAL_DEMO_DATA_DIR: directory, ARKIV_ACCESS_KEY: '', ARKIV_WALLET_PRIVATE_KEY: 'invalid-local-test', ARKIV_MAX_TOTAL_FEE_TGLM: '0' };
 let server;
 async function request(path, body, operation) {
  const response = await fetch(base + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json', ...(operation ? {'Idempotency-Key': operation} : {}) }, body: JSON.stringify(body) } : {});

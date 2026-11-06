@@ -99,3 +99,11 @@ test('Node adapter serves the same handler and drain waits for background events
   await server.drain();
  } finally { await new Promise(resolve => http.close(resolve)); }
 });
+
+test('inbox endpoints and receipt links follow the mount point and receiptPath', async () => {
+ const server = createTijoriServer({ storage: memoryStorage(), basePath: '/api/tijori', receiptPath: '/receipts/{id}' });
+ assert.equal(await server.run(async () => setting('TIJORI_BASE_PATH')), '/api/tijori');
+ assert.equal(await server.run(async () => setting('TIJORI_RECEIPT_PATH')), '/receipts/{id}');
+ const missing = await server.fetch(get('/api/tijori/v1/invoices/receipt?id=0f8fad5b-d9cb-469f-a165-70867728950e'));
+ assert.equal(missing.status, 404);
+});

@@ -1,11 +1,11 @@
-# Tichori API integration guide
+# Tijori API integration guide
 
 This is an integration scaffold for the local prototype. Object matching and physical approvals remain simulations. External-vault verification is deliberately unconfigured and returns HTTP 501. The API has no real user authentication or application isolation: caller-supplied identity IDs are demo selectors, not credentials. Keep the server bound to localhost. Cross-origin POST requests remain blocked; trusted local server-to-server consumers can use the API without a browser Origin header. Do not expose it publicly or use real funds or sensitive data.
 
 ## Architecture and teammate handoff
 
 ```text
-Tichori UI / another local app
+Tijori UI / another local app
     -> @tijori/client createTijoriClient() (packages/client/src/api.ts, optional typed HTTP client)
     -> /api/v1/* (app/api/[...path]/route.ts)
     -> packages/server/src/handler.ts (routing, limits, origin check) via createTijoriServer()
@@ -116,21 +116,21 @@ Guarded Safe vaults on Whitechain Sepolia (chain 1874). These endpoints share th
 
 | Method | Path | Input | Result |
 | --- | --- | --- | --- |
-| POST | `/vaults/whitechain` | `name`, `creatorId`, `addresses` (other signers' Tichori addresses); `Idempotency-Key` | The relayer deploys a majority Safe with `TichoriPresenceGuard` and the verifier installed at setup, verifies it on-chain, registers it. Returns scoped state and `vaultId`. A retry with the same key resumes and does not deploy again. |
+| POST | `/vaults/whitechain` | `name`, `creatorId`, `addresses` (other signers' Tijori addresses); `Idempotency-Key` | The relayer deploys a majority Safe with `TichoriPresenceGuard` and the verifier installed at setup, verifies it on-chain, registers it. Returns scoped state and `vaultId`. A retry with the same key resumes and does not deploy again. |
 | POST | `/proposals` | `vaultId`, `proposerId`, plus `to` + `amount` (USDT decimal) + optional `note`, or `invoiceId`; `Idempotency-Key` | Pending payout (one Arkiv write). Invoice payouts take the vendor address and amount from the invoice. |
 | POST | `/approval-sessions` | `proposalId`, `initiatorId` (a current Safe owner) | Fixes the SafeTx at the live nonce (USDT transfer, vault-paid USDT gas refund capped by the signed fields), supersedes other open sessions for the vault and creates a presence challenge. Returns `{ session, emit }`; only the initiator receives `emit.code` to broadcast. |
 | GET | `/treasury/sessions?identityId=` | Demo identity | Open and recent sessions for that member's vaults: SafeTx fields to sign, quorum progress, presence `challengeId`. In simulated mode it also returns `simulatedCode`. |
 | POST | `/physical-approvals` with `sessionId` | `sessionId`, `walletId`, `objectName`, `evidence: { reference: heardCode, challengeId }`, `signature` (EIP-712 SafeTx signature by the approver's identity key) | Checks, for this approval: object (`ObjectMatchingProvider`), presence in this session (`PresenceSessionProvider`), signer = this identity and a current owner. At the threshold, the verifier signs the `CoPresence` attestation and the relayer calls `executeWithAttestation`. Returns the session (`executed` with `txHash`) and scoped state. |
-| POST | `/vaults/inbox-key` | `vaultId`, `identityId` (member), `issuedAt` (ISO time, at most 5 min old), `signature` (EIP-191 over `inboxKeyMessage(vaultId, identityId, issuedAt)` from `@tijori/core/whitechain/safe-tx`, by the member's identity key) | `{ inboxKey, webhookSecret, endpoint }`. Derived from the server master key, so nothing secret is stored. Rotating `TICHORI_API_MASTER_KEY` revokes every issued key. |
+| POST | `/vaults/inbox-key` | `vaultId`, `identityId` (member), `issuedAt` (ISO time, at most 5 min old), `signature` (EIP-191 over `inboxKeyMessage(vaultId, identityId, issuedAt)` from `@tijori/core/whitechain/safe-tx`, by the member's identity key) | `{ inboxKey, webhookSecret, endpoint }`. Derived from the server master key, so nothing secret is stored. Rotating `TIJORI_API_MASTER_KEY` revokes every issued key. |
 | POST | `/invoices` | `Authorization: Bearer tinbox_…`; `vendorName`, `vendorAddress`, `amount`, `memo`, `dueDate` (YYYY-MM-DD), optional `externalId` (idempotent) and `webhookUrl` | `{ invoice, created, receiptPath }`. |
 | GET | `/invoices?id=` | Bearer inbox key | Invoice with `payment { txHash, explorerUrl, paidAt, approvals }` once paid. |
 | POST | `/invoices/remind` | Bearer inbox key; `id` | Increments reminders, at most hourly. |
 | GET | `/treasury/export?vaultId=&identityId=` | Member | `text/csv` accountant export, with formula-safe cells. |
 | GET | `/relayer` | None | Gas tank: relayer WBT, payouts sponsored, USDT refunds received, limits, pending transaction. |
 
-**Webhooks:** `invoice.paid` is POSTed to the invoice's `webhookUrl` with header `Tichori-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">`. It is retried twice. Verify it with `verifyWebhook()` from `@tichori/invoices`.
+**Webhooks:** `invoice.paid` is POSTed to the invoice's `webhookUrl` with header `Tijori-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "t.body">`. It is retried twice. Verify it with `verifyWebhook()` from `@tijori/invoices`.
 
-By default, non-public destinations are refused. That covers loopback, private, link-local, CGNAT, ULA, IPv4-mapped and reserved addresses. They are refused at invoice creation for IP literals and local names, and again after DNS resolution at every delivery. A residual DNS-rebinding window remains between that check and the connection. `TICHORI_WEBHOOK_ALLOW_PRIVATE=1` allows local destinations for the local vendor example.
+By default, non-public destinations are refused. That covers loopback, private, link-local, CGNAT, ULA, IPv4-mapped and reserved addresses. They are refused at invoice creation for IP literals and local names, and again after DNS resolution at every delivery. A residual DNS-rebinding window remains between that check and the connection. `TIJORI_WEBHOOK_ALLOW_PRIVATE=1` allows local destinations for the local vendor example.
 
 **Presence provider:** implement `PresenceSessionProvider` (`createChallenge`, `verify`) and pass it as `createTijoriServer({ providers: { presence } })`.
 - In the browser, the initiator's page calls `<TijoriProvider onPresenceEmit>` and dispatches `tijori:presence-emit` (and the deprecated `tichori:presence-emit`) with `{ challengeId, code, expiresAt }` for the emitter.

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { readSqliteVault } from '@tijori/server/storage/migrate-sqlite';
 
 test('read-only SQLite import preserves existing identities, relationships and acoustic history', () => {
- const dir=mkdtempSync(join(tmpdir(),'tichori-migrate-')),path=join(dir,'vault.sqlite');
+ const dir=mkdtempSync(join(tmpdir(),'tijori-migrate-')),path=join(dir,'vault.sqlite');
  try {
   const db=new DatabaseSync(path);
   db.exec(`CREATE TABLE wallets(id TEXT,name TEXT,object_name TEXT,world_id TEXT,created_at TEXT);

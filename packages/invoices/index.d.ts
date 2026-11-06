@@ -6,8 +6,10 @@ export type Invoice = {
  receiptUrl: string;
 };
 export type InvoicePaidEvent = { type: 'invoice.paid'; invoice: Omit<Invoice, 'receiptUrl'> };
-export declare class TichoriError extends Error { status?: number }
-export declare function createInvoiceClient(options: { baseUrl: string; inboxKey: string; fetch?: typeof fetch }): {
+export declare class TijoriError extends Error { status?: number }
+/** @deprecated Renamed to TijoriError. */
+export declare const TichoriError: typeof TijoriError;
+export declare function createInvoiceClient(options: { baseUrl: string; inboxKey: string; /** Where the treasury mounts its /v1 API. Default '/api/v1'. */ apiPath?: string; fetch?: typeof fetch }): {
  create(input: InvoiceInput): Promise<Invoice>;
  retrieve(id: string): Promise<Invoice>;
  remind(id: string): Promise<Omit<Invoice, 'receiptUrl'>>;

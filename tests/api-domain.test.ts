@@ -4,7 +4,7 @@ import { applyAction, emptyVault } from '@tijori/core/vault';
 import { applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from '@tijori/core/api/domain';
 import { providers } from '@tijori/server/providers';
 import type { IntegrationProviders } from '@tijori/core/integrations';
-import { createTichoriClient } from '@tijori/client/api';
+import { createTijoriClient } from '@tijori/client/api';
 
 const address = (n: number) => '0x' + n.toString(16).padStart(40, '0');
 const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
@@ -90,7 +90,7 @@ test('evidence references reject arbitrary payloads and external integration sta
 });
 test('API client maps actions to v1 endpoints and preserves retry IDs', async () => {
  const calls: { url: string; init?: RequestInit }[] = [];
- const client = createTichoriClient('http://localhost/api/v1/', async (input, init) => {
+ const client = createTijoriClient('http://localhost/api/v1/', async (input, init) => {
   calls.push({ url: String(input), init });
   return Response.json({ wallets: [], groups: [], transactions: [] });
  });

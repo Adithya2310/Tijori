@@ -99,7 +99,7 @@ export async function relay(ctx: { journal: TreasuryJournal; save: () => Promise
  const account = config.relayer;
  const [balance, block, nonce, pendingNonce] = await Promise.all([client.getBalance({ address: account.address }), client.getBlock({ blockTag: 'latest' }), client.getTransactionCount({ address: account.address, blockTag: 'latest' }), client.getTransactionCount({ address: account.address, blockTag: 'pending' })]);
  if (balance < config.minRelayerWei) throw new StorageError('The relayer gas tank is low. Top it up with WBT before relaying.');
- if (pendingNonce !== nonce) throw new StorageError('The relayer account has transactions pending outside Tichori. Resolve them first.');
+ if (pendingNonce !== nonce) throw new StorageError('The relayer account has transactions pending outside Tijori. Resolve them first.');
  // Estimation doubles as simulation: a reverting call costs the relayer nothing.
  let estimate: bigint;
  try { estimate = await client.estimateGas({ account: account.address, to: tx.to, data: tx.data, value: 0n }); }

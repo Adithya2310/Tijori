@@ -15,7 +15,7 @@ contract Deploy is Script {
         TichoriPresenceGuard guard = new TichoriPresenceGuard();
         TichoriSafeSetup setup = new TichoriSafeSetup();
         vm.stopBroadcast();
-        console2.log("TICHORI_GUARD_ADDRESS=%s", address(guard));
-        console2.log("TICHORI_SAFE_SETUP_ADDRESS=%s", address(setup));
+        console2.log("TIJORI_GUARD_ADDRESS=%s", address(guard));
+        console2.log("TIJORI_SAFE_SETUP_ADDRESS=%s", address(setup));
     }
 }

@@ -21,7 +21,7 @@ const artifact = async name => JSON.parse(await readFile(`contracts/out/${name}.
 const safeFixture = JSON.parse(await readFile('contracts/test/fixtures/safe-1.4.1.json', 'utf8'));
 const anvilPort = 8645, appPort = 3179;
 const anvil = spawn('anvil', ['--chain-id', '1874', '--port', String(anvilPort), '--silent'], { stdio: 'ignore' });
-const dir = await mkdtemp(join(tmpdir(), 'tichori-whitechain-test-'));
+const dir = await mkdtemp(join(tmpdir(), 'tijori-whitechain-test-'));
 const rpc = await rpcFixture();
 const chainUrl = `http://127.0.0.1:${anvilPort}`;
 const transport = http(chainUrl);
@@ -32,7 +32,7 @@ const admin = createWalletClient({ chain, transport, account: deployer });
 const relayerKey = generatePrivateKey(), verifierKey = generatePrivateKey();
 const relayer = privateKeyToAccount(relayerKey).address;
 const hooks = [];
-const webhook = createServer(async (req, res) => { let body = ''; for await (const c of req) body += c; hooks.push({ body, signature: req.headers['tichori-signature'] }); res.end('ok'); });
+const webhook = createServer(async (req, res) => { let body = ''; for await (const c of req) body += c; hooks.push({ body, signature: req.headers['tijori-signature'], legacySignature: req.headers['tichori-signature'] }); res.end('ok'); });
 await new Promise(r => webhook.listen(0, '127.0.0.1', r));
 let server;
 try {
@@ -44,8 +44,8 @@ try {
  await reader.request({ method: 'anvil_setBalance', params: [relayer, '0x' + parseEther('5').toString(16)] });
 
  const privateKey = '0x' + '11'.repeat(32);
- const env = { ...process.env, VAULT_DATA_DIR: dir, ARKIV_ACCESS_KEY: 'fixture', ARKIV_WALLET_PRIVATE_KEY: privateKey, ARKIV_WALLET_ADDRESS: privateKeyToAccount(privateKey).address, ARKIV_STATE_ENCRYPTION_KEY: '22'.repeat(32), ARKIV_NAMESPACE: 'fixture', ARKIV_MAX_TOTAL_FEE_TGLM: '0.1', NODE_OPTIONS: `--import=${pathToFileURL(resolve('tests/rpc-preload.mjs')).href}`, TICHORI_FIXTURE_URL: rpc.url,
-  WHITECHAIN_RPC_URL: chainUrl, WHITECHAIN_RELAYER_PRIVATE_KEY: relayerKey, TICHORI_VERIFIER_PRIVATE_KEY: verifierKey, TICHORI_GUARD_ADDRESS: guard, TICHORI_SAFE_SETUP_ADDRESS: setup, TICHORI_API_MASTER_KEY: '33'.repeat(32), TICHORI_WEBHOOK_ALLOW_PRIVATE: '1' };
+ const env = { ...process.env, VAULT_DATA_DIR: dir, ARKIV_ACCESS_KEY: 'fixture', ARKIV_WALLET_PRIVATE_KEY: privateKey, ARKIV_WALLET_ADDRESS: privateKeyToAccount(privateKey).address, ARKIV_STATE_ENCRYPTION_KEY: '22'.repeat(32), ARKIV_NAMESPACE: 'fixture', ARKIV_MAX_TOTAL_FEE_TGLM: '0.1', NODE_OPTIONS: `--import=${pathToFileURL(resolve('tests/rpc-preload.mjs')).href}`, TIJORI_FIXTURE_URL: rpc.url,
+  WHITECHAIN_RPC_URL: chainUrl, WHITECHAIN_RELAYER_PRIVATE_KEY: relayerKey, TIJORI_VERIFIER_PRIVATE_KEY: verifierKey, TIJORI_GUARD_ADDRESS: guard, TIJORI_SAFE_SETUP_ADDRESS: setup, TIJORI_API_MASTER_KEY: '33'.repeat(32), TIJORI_WEBHOOK_ALLOW_PRIVATE: '1' };
  server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(appPort)], { env, stdio: 'ignore' });
  const base = `http://localhost:${appPort}/api/v1/`;
  const call = async (path, body, headers = {}) => { const r = await fetch(base + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) } : { headers }); const text = await r.text(); let data; try { data = JSON.parse(text); } catch { data = text; } return { status: r.status, data }; };
@@ -127,6 +127,7 @@ try {
  for (let i = 0; i < 50 && !hooks.length; i++) await new Promise(r => setTimeout(r, 100));
  assert.equal(hooks.length, 1, 'webhook delivered');
  assert.ok(verifyWebhook(hooks[0].body, hooks[0].signature, inbox.webhookSecret));
+ assert.equal(hooks[0].legacySignature, hooks[0].signature, 'existing receivers keep getting Tichori-Signature');
  assert.equal(JSON.parse(hooks[0].body).type, 'invoice.paid');
  assert.ok(!verifyWebhook(hooks[0].body, hooks[0].signature, 'whsec_wrong'));
  const csv = await call(`treasury/export?vaultId=${vaultId}&identityId=${people[2].id}`);

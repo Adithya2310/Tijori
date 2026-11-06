@@ -7,7 +7,7 @@ import { withLocalStore } from '@tijori/server/storage/local-file';
 import { applyAction } from '@tijori/core/vault';
 
 test('local storage serializes device writes, encrypts records, preserves reads, and refuses missing/corrupt state', async () => {
- const directory = await mkdtemp(join(tmpdir(), 'tichori-local-unit-'));
+ const directory = await mkdtemp(join(tmpdir(), 'tijori-local-unit-'));
  try {
   const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
   await Promise.all([1, 2].map(n => withLocalStore(async store => {

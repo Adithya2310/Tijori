@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { validModelFile } from '@tijori/client/cli/prepare-assets';
 
 test('model asset validation rejects incomplete, changed and missing downloads', async () => {
- const directory = await mkdtemp(join(tmpdir(), 'tichori-model-test-'));
+ const directory = await mkdtemp(join(tmpdir(), 'tijori-model-test-'));
  try {
   const path = join(directory, 'model.onnx'), contents = Buffer.from('synthetic model fixture');
   const expected = { size: contents.length, sha256: createHash('sha256').update(contents).digest('hex') };

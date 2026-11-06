@@ -119,7 +119,7 @@ export async function startApprovalSession(body: Record<string, unknown>): Promi
   const live = await readWhitechainSafe(group.safe!.address);
   if (live.guard !== config.guard) throw new VaultError('This vault is not protected by the configured presence guard.');
   const verifier = await client.readContract({ address: config.guard, abi: guardAbi, functionName: 'verifier', args: [live.address] });
-  if (getAddress(verifier) !== config.verifier.address) throw new VaultError('This vault trusts a different Tichori verifier.');
+  if (getAddress(verifier) !== config.verifier.address) throw new VaultError('This vault trusts a different Tijori verifier.');
   if (!wallet.address || !live.owners.some(o => o.toLowerCase() === wallet.address)) throw new VaultError('Only current vault signers can start an approval session.');
   const amount = BigInt(proposal.amount), data = usdtTransferData(proposal.to as Address, amount);
   let inner: bigint;
@@ -280,7 +280,7 @@ export async function issueInboxKey(body: Record<string, unknown>): Promise<Inbo
  try { signer = await recoverMessageAddress({ message: inboxKeyMessage(vaultId, identityId, issuedAt), signature }); }
  catch { throw new VaultError('The inbox key request signature is invalid.'); }
  if (!wallet.address || signer.toLowerCase() !== wallet.address) throw new VaultError('The inbox key request was not signed by your identity key.');
- return { inboxKey: inboxKeyFor(master, vaultId), webhookSecret: webhookSecretFor(master, vaultId), endpoint: '/api/v1/invoices' };
+ return { inboxKey: inboxKeyFor(master, vaultId), webhookSecret: webhookSecretFor(master, vaultId), endpoint: `${(setting('TIJORI_BASE_PATH') ?? '/api').replace(/\/+$/, '')}/v1/invoices` };
 }
 function inboxVault(authorization: string | null) {
  const vaultId = verifyInboxKey(masterKey(), authorization?.replace(/^Bearer\s+/i, '').trim());
@@ -288,6 +288,7 @@ function inboxVault(authorization: string | null) {
  return vaultId;
 }
 export class AuthError extends Error {}
+const receiptPathFor = (id: string) => (setting('TIJORI_RECEIPT_PATH') || '/invoice/{id}').replace('{id}', encodeURIComponent(id));
 const allowPrivateWebhooks = () => setting('TIJORI_WEBHOOK_ALLOW_PRIVATE') === '1';
 export async function vendorCreateInvoice(authorization: string | null, body: Record<string, unknown>) {
  const vaultId = inboxVault(authorization);
@@ -295,7 +296,7 @@ export async function vendorCreateInvoice(authorization: string | null, body: Re
   const previous = await store.read(), vault = previous.vault;
   const { invoice, created } = createInvoice(vault, vaultId, body, { allowPrivateWebhooks: allowPrivateWebhooks() });
   if (created) await store.write(vault, previous);
-  return { invoice: invoiceView(vault, invoice), created, receiptPath: `/invoice/${invoice.id}` };
+  return { invoice: invoiceView(vault, invoice), created, receiptPath: receiptPathFor(invoice.id) };
  });
 }
 export async function vendorGetInvoice(authorization: string | null, id: string | null) {
@@ -304,7 +305,7 @@ export async function vendorGetInvoice(authorization: string | null, id: string 
   const vault = (await store.read()).vault;
   const invoice = vault.invoices.find(i => i.id === id && i.group_id === vaultId);
   if (!invoice) throw new VaultError('Unknown invoice.');
-  return { invoice: invoiceView(vault, invoice), receiptPath: `/invoice/${invoice.id}` };
+  return { invoice: invoiceView(vault, invoice), receiptPath: receiptPathFor(invoice.id) };
  });
 }
 export async function vendorRemind(authorization: string | null, body: Record<string, unknown>) {
@@ -349,7 +350,7 @@ export async function treasuryExport(vaultId: string | null, identityId: string 
  return withState(async store => {
   const vault = (await store.read()).vault;
   memberWallet(vault, vaultId ?? '', identityId ?? '');
-  return { csv: treasuryCsv(vault, vaultId!), filename: `tichori-${whitechainVault(vault, vaultId!).name.replace(/[^\w-]+/g, '-').toLowerCase()}-payouts.csv` };
+  return { csv: treasuryCsv(vault, vaultId!), filename: `tijori-${whitechainVault(vault, vaultId!).name.replace(/[^\w-]+/g, '-').toLowerCase()}-payouts.csv` };
  });
 }
 export async function relayerStatus(): Promise<RelayerStatus> {

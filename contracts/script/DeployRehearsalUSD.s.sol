@@ -15,6 +15,6 @@ contract DeployRehearsalUSD is Script {
         RehearsalUSD token = new RehearsalUSD();
         token.mint(mintTo, amount);
         vm.stopBroadcast();
-        console2.log("TICHORI_REHEARSAL_TOKEN_ADDRESS=%s", address(token));
+        console2.log("TIJORI_REHEARSAL_TOKEN_ADDRESS=%s", address(token));
     }
 }

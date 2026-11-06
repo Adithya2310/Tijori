@@ -22,7 +22,7 @@ export default function PhoneAccess() {
   catch{setNotice('Copy the link shown above using your browser.');}
  }
  return <aside className="tj-phone-access" aria-label="Phone connection">
-  <div className="tj-phone-access-body"><div className="tj-section-kicker"><Smartphone size={15}/> TRY IT ON ANOTHER DEVICE</div><h3>Open Tichori on your phone</h3>
+  <div className="tj-phone-access-body"><div className="tj-section-kicker"><Smartphone size={15}/> TRY IT ON ANOTHER DEVICE</div><h3>Open Tijori on your phone</h3>
    {!network&&!error&&<p>Loading local connection links…</p>}
    {error&&<p role="alert">{error} Start the local phone server with <code>npm run dev:phone</code>.</p>}
    {network&&!network.enabled&&<><p>Run <code>npm run dev:phone</code> on this laptop, then open <a href={network.laptopUrl}>{network.laptopUrl}</a> for the phone QR code.</p><p>Keep both devices on the same Wi-Fi or hotspot. The phone server uses the same encrypted Arkiv groups and identities.</p></>}
@@ -35,6 +35,6 @@ export default function PhoneAccess() {
    </>}
    {notice&&<p role="status">{notice}</p>}
   </div>
-  {network?.enabled&&selected&&<div className="tj-phone-qr"><QRCodeSVG value={selected} size={144} marginSize={4} title="Scan to open this local Tichori server"/><small>Same app · same group check</small></div>}
+  {network?.enabled&&selected&&<div className="tj-phone-qr"><QRCodeSVG value={selected} size={144} marginSize={4} title="Scan to open this local Tijori server"/><small>Same app · same group check</small></div>}
  </aside>;
 }

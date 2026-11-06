@@ -31,10 +31,10 @@ export default function AnonRpcDiagnostic() {
   }
  }
  return <main className={styles.page}>
-  <Link href="/">← Tichori</Link>
+  <Link href="/">← Tijori</Link>
   <p className={styles.kicker}>READ-ONLY CONNECTIVITY DIAGNOSTIC</p>
   <h1>Anon RPC test</h1>
-  <p>Whitechain is not integrated into Tichori. This isolated test asks a testnet RPC for its chain ID through the published Nym worker.</p>
+  <p>Whitechain is not integrated into Tijori. This isolated test asks a testnet RPC for its chain ID through the published Nym worker.</p>
   <p className={styles.flow}>Application → Anon RPC browser harness → Nym mixnet → RPC endpoint → application</p>
   <dl><dt>Endpoint</dt><dd>{WHITECHAIN_TESTNET.endpoint}</dd><dt>Expected chain</dt><dd>{WHITECHAIN_TESTNET.name} · 1874 (0x752)</dd><dt>Request</dt><dd>eth_chainId · no wallet, transactions, or funds</dd></dl>
   <div className={styles.actions}>

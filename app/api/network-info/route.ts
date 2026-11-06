@@ -4,8 +4,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export function GET() {
- const enabled = process.env.TICHORI_PHONE_DEV === '1';
- const port = Number(process.env.TICHORI_PHONE_PORT || 3443);
+ const enabled = process.env.TIJORI_PHONE_DEV === '1';
+ const port = Number(process.env.TIJORI_PHONE_PORT || 3443);
  return NextResponse.json({
   enabled,
   laptopUrl:`https://localhost:${port}`,

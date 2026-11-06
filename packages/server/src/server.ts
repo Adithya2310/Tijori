@@ -22,8 +22,8 @@ export type TijoriServer = {
  * features that need them, so the server can be constructed during builds.
  */
 export function createTijoriServer(config: TijoriServerConfig = {}): TijoriServer {
- const settings = Object.freeze(toSettings(config));
  const basePath = config.basePath ?? '/api';
+ const settings: Readonly<Record<string, string | undefined>> = Object.freeze({ ...toSettings(config), TIJORI_BASE_PATH: basePath });
  const pending = new Set<Promise<unknown>>();
  let storage: StorageAdapter | undefined;
  const resolveStorage = (): StorageAdapter => storage ??= typeof config.storage === 'object' ? config.storage : config.storage === 'local' ? localFileStorage(settings.LOCAL_DEMO_DATA_DIR) : config.storage === 'arkiv' ? arkivStorage() : storageFromSettings();

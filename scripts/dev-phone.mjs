@@ -5,8 +5,8 @@ import { createServer } from 'node:net';
 import { createServer as createHttpsServer } from 'node:https';
 import { lanAddresses } from '../lib/local-network.mjs';
 
-const port = Number(process.env.TICHORI_PHONE_PORT || 3443);
-if (!Number.isInteger(port) || port < 1024 || port > 65535) throw Error('TICHORI_PHONE_PORT must be an integer between 1024 and 65535.');
+const port = Number(process.env.TIJORI_PHONE_PORT || process.env.TICHORI_PHONE_PORT || 3443);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw Error('TIJORI_PHONE_PORT must be an integer between 1024 and 65535.');
 // Fail instead of silently changing the port and invalidating the phone QR code.
 await new Promise((resolveReady,reject) => {
  const probe = createServer();probe.once('error',reject);
@@ -26,15 +26,15 @@ const existingHosts = existsSync(metadata) ? readFileSync(metadata,'utf8') : '';
 const valid = existsSync(cert) && spawnSync('openssl',['x509','-checkend','86400','-noout','-in',cert],{stdio:'ignore'}).status === 0;
 if (!existsSync(key) || !valid || existingHosts !== signature) {
  const config = resolve(directory,'openssl.cnf');
- writeFileSync(config,`[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ext\n[dn]\nCN=Tichori local demo\n[ext]\nsubjectAltName=@names\n[names]\nDNS.1=localhost\n${hosts.slice(1).map((host,i)=>`IP.${i+1}=${host}`).join('\n')}\n`);
+ writeFileSync(config,`[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ext\n[dn]\nCN=Tijori local demo\n[ext]\nsubjectAltName=@names\n[names]\nDNS.1=localhost\n${hosts.slice(1).map((host,i)=>`IP.${i+1}=${host}`).join('\n')}\n`);
  const result = spawnSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','30','-keyout',key,'-out',cert,'-config',config],{encoding:'utf8'});
  if (result.status !== 0) {console.error('Could not generate the local HTTPS certificate. Install OpenSSL and retry.',result.stderr);process.exit(1);}
  chmodSync(key,0o600);writeFileSync(metadata,signature);
 }
 const watch = process.argv.includes('--watch');
-const environment = {...process.env,TICHORI_PHONE_DEV:'1',TICHORI_PHONE_PORT:String(port),TICHORI_PHONE_MODE:watch?'development':'production'};
+const environment = {...process.env,TIJORI_PHONE_DEV:'1',TIJORI_PHONE_PORT:String(port),TIJORI_PHONE_MODE:watch?'development':'production'};
 function printLinks() {
- console.log(`\nTichori · local phone testing (${watch?'development':'optimized'})\nLaptop: https://localhost:${port}`);
+ console.log(`\nTijori · local phone testing (${watch?'development':'optimized'})\nLaptop: https://localhost:${port}`);
  for (const {name,address} of addresses) console.log(`Phone (${name}): https://${address}:${port}`);
  if (!addresses.length) console.log('No private network address found. Connect to Wi-Fi or a phone hotspot, then restart.');
  console.log('Use the same Wi-Fi/hotspot. Scan the QR in the app or open a phone link.');
