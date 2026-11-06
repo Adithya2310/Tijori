@@ -1,4 +1,3 @@
-import 'server-only';
 import { getAddress, type Address } from 'viem';
 import { SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID } from '@tijori/core/whitechain/chain';
 import { assertWhitechain, usdtAddress, whitechainClient } from './config.ts';

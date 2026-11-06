@@ -11,11 +11,13 @@ import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { emptyVault, VaultError, type Vault } from '@tijori/core/vault';
 import { encryptState, decryptState } from './codec.ts';
+import { LEGACY_ARKIV_ENCODING, LEGACY_ARKIV_NAMESPACE, LEGACY_ARKIV_SCHEMA } from '@tijori/core/legacy';
+import { setting } from '../context.ts';
 
-const State = defineSchema('tichori_state_v1', { namespace: str().indexed(), revision: u64(), encoding: str(), ciphertext: bytes() });
+const State = defineSchema(LEGACY_ARKIV_SCHEMA, { namespace: str().indexed(), revision: u64(), encoding: str(), ciphertext: bytes() });
 const registry = '0x4400000000000000000000000000000000000044' as const;
 const executeAbi = parseAbi(['function execute((uint8 operation, bytes operationData)[] ops) external returns (bytes32[] keys)']);
-const encoding = 'tichori/aes-256-gcm/v1';
+const encoding = LEGACY_ARKIV_ENCODING;
 export class StorageError extends Error {}
 function fail(message: string): never { throw new StorageError(message); }
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -31,19 +33,20 @@ export async function durableJson(path: string, value: unknown) {
  try { await parent.sync(); } finally { await parent.close(); }
 }
 export function arkivConfig() {
- const accessKey = process.env.ARKIV_ACCESS_KEY;
- const rawKey = process.env.ARKIV_WALLET_PRIVATE_KEY?.trim();
+ const accessKey = setting('ARKIV_ACCESS_KEY');
+ const rawKey = setting('ARKIV_WALLET_PRIVATE_KEY')?.trim();
  const privateKey = rawKey && /^[\da-f]{64}$/i.test(rawKey) ? `0x${rawKey}` : rawKey;
- const key = process.env.ARKIV_STATE_ENCRYPTION_KEY;
- const namespace = process.env.ARKIV_NAMESPACE || 'tichori-local-v1';
+ const key = setting('ARKIV_STATE_ENCRYPTION_KEY');
+ const namespace = setting('ARKIV_NAMESPACE') || LEGACY_ARKIV_NAMESPACE;
  if (!accessKey) fail('Configure ARKIV_ACCESS_KEY in your server environment.');
  if (!privateKey || !/^0x[\da-f]{64}$/i.test(privateKey)) fail('Configure a valid ARKIV_WALLET_PRIVATE_KEY on the server.');
  if (!key || !/^[\da-f]{64}$/i.test(key)) fail('Configure ARKIV_STATE_ENCRYPTION_KEY with 32 random bytes in hex.');
  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(namespace)) fail('Invalid ARKIV_NAMESPACE.');
  const account = privateKeyToAccount(privateKey as Hex);
- const expected = process.env.ARKIV_WALLET_ADDRESS || '0x66330597bD0a67B970CF32F003a70444CEB27c34';
+ // Optional pin: when set, the signer must match it (guards against loading the wrong key).
+ const expected = setting('ARKIV_WALLET_ADDRESS') || account.address;
  if (account.address.toLowerCase() !== expected.toLowerCase()) fail('Arkiv signer does not match ARKIV_WALLET_ADDRESS.');
- return { accessKey, account, key: Buffer.from(key, 'hex'), namespace, root: process.env.VAULT_DATA_DIR || join(process.cwd(), 'data') };
+ return { accessKey, account, key: Buffer.from(key, 'hex'), namespace, root: setting('VAULT_DATA_DIR') || join(process.cwd(), 'data') };
 }
 
 export async function withArkiv<T>(work: (store: Awaited<ReturnType<typeof openStore>>) => Promise<T>): Promise<T> {
@@ -120,7 +123,7 @@ async function openStore(config: ReturnType<typeof arkivConfig>) {
   return { vault, revision: row.revision.value, entityKey: row.$key };
  };
  const write = async (vault: Vault, previous: Awaited<ReturnType<typeof read>>) => {
-  const cap = process.env.ARKIV_MAX_TOTAL_FEE_TGLM;
+  const cap = setting('ARKIV_MAX_TOTAL_FEE_TGLM');
   if (!cap || !/^\d+(\.\d{1,18})?$/.test(cap) || parseEther(cap) <= 0n) fail('Set an approved ARKIV_MAX_TOTAL_FEE_TGLM before enabling writes.');
   const ciphertext = `0x${encryptState(vault, key, context).toString('hex')}` as Hex;
   const revision = previous.revision + 1n;

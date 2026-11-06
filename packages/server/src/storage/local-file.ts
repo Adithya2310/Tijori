@@ -1,14 +1,16 @@
 import { mkdir, open, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { durableJson, StorageError } from './arkiv/store.ts';
-import { encryptState, decryptState } from './arkiv/codec.ts';
+import { durableJson, StorageError } from './arkiv.ts';
+import { encryptState, decryptState } from './codec.ts';
+import { LEGACY_LOCAL_STORE_CONTEXT } from '@tijori/core/legacy';
+import { setting } from '../context.ts';
 import { emptyVault, VaultError } from '@tijori/core/vault';
 import type { StateStore } from '@tijori/core/state-store';
 
-const context = 'tichori-local-acoustic-demo-v1';
+const context = LEGACY_LOCAL_STORE_CONTEXT;
 // Explicit opt-in storage, independent of Arkiv credentials, journals and namespaces.
-export async function withLocalStore<T>(work: (store: StateStore) => Promise<T>, directory = process.env.LOCAL_DEMO_DATA_DIR || join(process.cwd(), 'data', 'local-demo')): Promise<T> {
+export async function withLocalStore<T>(work: (store: StateStore) => Promise<T>, directory = setting('LOCAL_DEMO_DATA_DIR') || join(process.cwd(), 'data', 'local-demo')): Promise<T> {
  try { await mkdir(directory, { recursive: true, mode: 0o700 }); }
  catch { throw new StorageError('Cannot open the local demo data directory.'); }
  const lockPath = join(directory, 'state.lock');

@@ -4,7 +4,7 @@ import { featuresFromTokens, compareDinoFeatures } from '@tijori/core/dino';
 import { packObjectProfile, unpackObjectProfile } from '@tijori/core/object-profile';
 import { createObjectIdentity, unlockObjectIdentity } from '../lib/dino-wallet.ts';
 import { applyAction, emptyVault, validateVault, publicState } from '@tijori/core/vault';
-import { encryptState } from '../lib/arkiv/codec.ts';
+import { encryptState } from '@tijori/server/storage/codec';
 test('compact references roundtrip with stable key wrapping and remain private in public state',async()=>{
  const data=new Float32Array(257*384);for(let i=0;i<257;i++)data[i*384]=1;
  const original=featuresFromTokens(data,[1,257,384]);

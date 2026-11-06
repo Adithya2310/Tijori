@@ -52,7 +52,6 @@
     "README.md",
     "LICENSE"
   ],
-  "sideEffects": false,
   "dependencies": {
     "@tijori/core": "0.0.0",
     "@arkiv-network/sdk": "1.0.1",

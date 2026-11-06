@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readSqliteVault } from '../lib/arkiv/migrate-sqlite.ts';
+import { readSqliteVault } from '@tijori/server/storage/migrate-sqlite';
 
 test('read-only SQLite import preserves existing identities, relationships and acoustic history', () => {
  const dir=mkdtempSync(join(tmpdir(),'tichori-migrate-')),path=join(dir,'vault.sqlite');

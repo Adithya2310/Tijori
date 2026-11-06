@@ -42,8 +42,8 @@ Receipt: /invoice/[id] · webhook invoice.paid (HMAC) · GET /api/v1/treasury/ex
 
 **Key files:**
 - `contracts/`: the Foundry project, with `TichoriPresenceGuard`, `TichoriSafeSetup` and tests against the canonical Safe 1.4.1 bytecode read from Whitechain.
-- `lib/whitechain/`: chain constants, EIP-712 helpers, the relayer (journaled, never resends) and the pure treasury domain.
-- `lib/api/treasury.ts`: the service behind the `/api/v1` routes.
+- `packages/core/src/whitechain/`: chain constants, EIP-712 helpers and the pure treasury domain. `packages/server/src/whitechain/`: the relayer (journaled, never resends), config and keys.
+- `packages/server/src/services/treasury.ts`: the service behind the `/api/v1` routes.
 - `app/treasury-panel.tsx`: the UI.
 - `packages/tichori-invoices`: the vendor SDK.
 - `examples/vendor-studio`: a separate vendor app, where the integration is about 20 lines.
@@ -119,7 +119,7 @@ No testnet funds are spent by tests.
 ### Current limitations (honest)
 
 - **Simulated checks:** object matching and the ultrasonic presence check are **simulated providers** in this repo.
-  - The real implementations plug into `ObjectMatchingProvider` and `PresenceSessionProvider` (`lib/integrations`).
+  - The real implementations plug into `ObjectMatchingProvider` and `PresenceSessionProvider` (`packages/core/src/integrations.ts`; pass replacements as `createTijoriServer({ providers })`).
   - The UI emits `tichori:presence-emit` and calls `window.tichoriPresence.listen()` when present.
   - Frequency matching alone does not prove proximity: relay and replay must be handled by the real provider.
 - **Simulated room code is visible to members:** in simulated presence mode, members' session listings include the room code so the flow can be demonstrated without audio. In live mode only the initiator's device receives it.
@@ -156,7 +156,7 @@ Existing demo vaults retain their old behavior and have no fund-holding address.
 
 ## Storage design and limits
 
-`lib/vault.ts` preserves the demo rules and validates relationships. `lib/arkiv/store.ts` stores a named `tichori_state_v1` entity with an indexed namespace, revision, encoding and unindexed ciphertext bytes. Reads require the configured creator and owner. One encrypted aggregate makes each logical change atomic and avoids partially updated membership or approvals. It deliberately targets a small demo: serialized plaintext is capped at 100,000 bytes and exact writes must also fit the gas limits. This is not a scalable relational database replacement.
+`packages/core/src/vault.ts` preserves the demo rules and validates relationships. `packages/server/src/storage/arkiv.ts` stores a named `tichori_state_v1` entity with an indexed namespace, revision, encoding and unindexed ciphertext bytes. Reads require the configured creator and owner. One encrypted aggregate makes each logical change atomic and avoids partially updated membership or approvals. It deliberately targets a small demo: serialized plaintext is capped at 100,000 bytes and exact writes must also fit the gas limits. This is not a scalable relational database replacement.
 
 AES-256-GCM uses an independent server key, a fresh 12-byte IV, and authenticated context binding chain genesis, signer, namespace and format version. Public metadata still reveals the server wallet, namespace, revision, ciphertext length, timing and expiration. Encryption does not add real user authentication. Keep the signing wallet exclusive to this app and do not transfer the state entity.
 

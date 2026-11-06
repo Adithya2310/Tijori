@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { IntegrationProviders, PresenceSessionProvider } from '@tijori/core/integrations';
 import { IntegrationUnavailableError } from '@tijori/core/integrations';
+import { registerDefaults, type TijoriProviders } from './context.ts';
 
 /** Replace individual providers here; HTTP handlers and UI share these services. */
 export const providers: IntegrationProviders = {
@@ -34,3 +35,7 @@ export const presenceProvider: PresenceSessionProvider = {
   return { accepted: fresh && matches, mode: 'simulated', provider: this.id };
  },
 };
+
+/** The default provider set. Override any of them with createTijoriServer({ providers: { ... } }). */
+export const defaultProviders: TijoriProviders = { ...providers, presence: presenceProvider };
+registerDefaults({ providers: () => defaultProviders });

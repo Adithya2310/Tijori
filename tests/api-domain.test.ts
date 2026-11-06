@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyAction, emptyVault } from '@tijori/core/vault';
 import { applicationState, applyIntegratedAction, discoverRequests, evidenceFrom, verifyObject } from '@tijori/core/api/domain';
-import { providers } from '../lib/integrations/providers.ts';
+import { providers } from '@tijori/server/providers';
 import type { IntegrationProviders } from '@tijori/core/integrations';
 import { createTichoriClient } from '../lib/api/client.ts';
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, unlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { withLocalStore } from '../lib/local-store.ts';
+import { withLocalStore } from '@tijori/server/storage/local-file';
 import { applyAction } from '@tijori/core/vault';
 
 test('local storage serializes device writes, encrypts records, preserves reads, and refuses missing/corrupt state', async () => {

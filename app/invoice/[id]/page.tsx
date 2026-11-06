@@ -1,12 +1,12 @@
 import { connection } from 'next/server';
-import { invoiceReceipt } from '@/lib/api/treasury';
+import { tijori } from '@/lib/tijori';
 
 // Public, verifiable receipt for a vendor invoice. The invoice ID is an unguessable capability link.
 export default async function InvoiceReceipt({ params }: { params: Promise<{ id: string }> }) {
  await connection();
  const { id } = await params;
- let invoice: Awaited<ReturnType<typeof invoiceReceipt>> = null;
- try { invoice = /^[0-9a-f-]{36}$/.test(id) ? await invoiceReceipt(id) : null; } catch { invoice = null; }
+ let invoice: Awaited<ReturnType<typeof tijori.invoiceReceipt>> = null;
+ try { invoice = /^[0-9a-f-]{36}$/.test(id) ? await tijori.invoiceReceipt(id) : null; } catch { invoice = null; }
  if (!invoice) return <main className="receipt-shell"><div className="receipt-card"><h1>Invoice not found</h1><p>Check the link from your vendor or treasury.</p></div></main>;
  const paid = invoice.status === 'paid';
  return <main className="receipt-shell"><div className="receipt-card">

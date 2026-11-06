@@ -5,7 +5,7 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { applyAction, emptyVault, publicState, validateVault, type Vault } from '@tijori/core/vault';
 import { formatUsdt, parseUsdt } from '@tijori/core/whitechain/chain';
 import { createInvoice, createProposal, recordExecution, remindInvoice, treasuryCsv } from '@tijori/core/whitechain/domain';
-import { deriveMasterKey, inboxKeyFor, signWebhook, verifyInboxKey, webhookSecretFor } from '../lib/whitechain/keys.ts';
+import { deriveMasterKey, inboxKeyFor, signWebhook, verifyInboxKey, webhookSecretFor } from '@tijori/server/whitechain/keys';
 import { attestationTypedData, packSignatures, safeTxTypedData, sortAddresses } from '@tijori/core/whitechain/safe-tx';
 import { verifyWebhook } from '@tijori/invoices';
 
@@ -73,7 +73,7 @@ test('invoices: idempotent externalId, validated fields, private webhooks gated,
 
 test('webhook URLs on private networks are refused unless explicitly allowed', async () => {
  const { vault, vaultId } = treasury();
- const { isNonPublicAddress, resolvesToPublicAddresses } = await import('../lib/whitechain/net-guard.ts');
+ const { isNonPublicAddress, resolvesToPublicAddresses } = await import('@tijori/server/whitechain/net-guard');
  for (const url of ['http://[::1]/h', 'http://[::ffff:7f00:1]/h', 'http://[fc00::1]/h', 'http://100.64.0.1/h', 'http://169.254.169.254/latest', 'http://intranet/h']) assert.throws(() => createInvoice(vault, vaultId, { vendorName: 'S', vendorAddress: addr(7), amount: '1', dueDate: '2026-12-01', webhookUrl: url }, { allowPrivateWebhooks: false }), /Private-network/, url);
  for (const ip of ['::ffff:10.0.0.1', '::', '0.0.0.0', '198.18.0.1']) assert.equal(isNonPublicAddress(ip), true, ip);
  assert.equal(isNonPublicAddress('8.8.8.8'), false);

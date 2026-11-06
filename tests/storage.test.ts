@@ -5,7 +5,7 @@ import { emptyVault, applyAction, publicState, validateVault } from '@tijori/cor
 import { generateIdentity, unlockIdentity } from '@tijori/core/identity-key';
 const addr = (n: number) => '0x' + n.toString(16).padStart(40, '0');
 const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
-import { encryptState, decryptState } from '../lib/arkiv/codec.ts';
+import { encryptState, decryptState } from '@tijori/server/storage/codec';
 test('encrypted state uses fresh IVs, binds context, rejects tampering/wrong keys and oversized state', () => {
  const vault = emptyVault(), key = randomBytes(32), context = 'testnet:owner:namespace:1';
  applyAction(vault, 'signup', { name: 'Alice', address: addr(1), keyEnvelope, objectName: 'Blue mug' });
@@ -33,7 +33,7 @@ test('invitation claims preserve membership and private fields stay outside publ
 });
 
 test('migrates legacy state and binds a verified Safe to its signer identities', async () => {
- const { normalizeOwners, validateSalt, verifySafeDeployment } = await import('../lib/safe.ts');
+ const { normalizeOwners, validateSalt, verifySafeDeployment } = await import('@tijori/server/legacy-safe');
  const legacy = { version: 1, wallets: [], groups: [], transactions: [], operations: [] };
  const vault = validateVault(legacy);
  assert.equal(vault.version, 6);

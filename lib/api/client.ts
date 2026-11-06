@@ -2,7 +2,7 @@ import type { applicationState } from '@tijori/core/api/domain';
 import type { Evidence, Verification } from '@tijori/core/integrations';
 import type { KeyEnvelope } from '@tijori/core/identity-key';
 import type { PendingSafe } from '../safe-client.ts';
-import type { listApprovalSessions, relayerStatus, startApprovalSession, issueInboxKey } from './treasury.ts';
+import type { listApprovalSessions, relayerStatus, startApprovalSession, issueInboxKey } from '@tijori/server/services/treasury';
 
 export type ApplicationState = ReturnType<typeof applicationState> & {storageMode?:'local'|'arkiv';peers?:{id:string;name:string;address:string|null}[]};
 export type ApiTransaction = ApplicationState['transactions'][number];

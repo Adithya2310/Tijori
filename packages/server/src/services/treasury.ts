@@ -1,10 +1,9 @@
-import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
-import { after } from 'next/server';
 import { decodeEventLog, encodeFunctionData, formatEther, getAddress, hashTypedData, isAddress, recoverMessageAddress, recoverTypedDataAddress, zeroAddress, type Address, type Hex, type TransactionReceipt } from 'viem';
-import { withState, StorageError } from '../db.ts';
+import { withState, StorageError } from '../storage/index.ts';
 import { applyAction, VaultError, type Vault } from '@tijori/core/vault';
-import { providers, presenceProvider } from '../integrations/providers.ts';
+import { currentProviders, emit, setting, waitUntil } from '../context.ts';
+import '../providers.ts';
 import { IntegrationUnavailableError } from '@tijori/core/integrations';
 import { applicationState } from '@tijori/core/api/domain';
 import { WHITECHAIN_CHAIN_ID, explorerTx, formatUsdt } from '@tijori/core/whitechain/chain';
@@ -20,8 +19,8 @@ const str = (x: unknown, max = 200) => (typeof x === 'string' ? x.trim() : '').s
 type Ctx = Parameters<Parameters<typeof withTreasury>[0]>[0];
 
 function masterKey() {
- const secret = process.env.TICHORI_API_MASTER_KEY?.trim() || process.env.ARKIV_STATE_ENCRYPTION_KEY?.trim();
- if (!secret || !/^[\da-f]{64}$/i.test(secret)) throw new IntegrationUnavailableError('Set TICHORI_API_MASTER_KEY (32 bytes hex) to issue vendor inbox keys.');
+ const secret = setting('TIJORI_API_MASTER_KEY')?.trim() || setting('ARKIV_STATE_ENCRYPTION_KEY')?.trim();
+ if (!secret || !/^[\da-f]{64}$/i.test(secret)) throw new IntegrationUnavailableError('Set TIJORI_API_MASTER_KEY (32 bytes hex) to issue vendor inbox keys.');
  return deriveMasterKey(secret);
 }
 const operationId = (value: string | null | undefined) => {
@@ -52,7 +51,7 @@ async function arkivMutation<T>(action: string, body: unknown, opId: string, ide
 export function treasuryCapabilities() {
  let guard: string | null = null;
  try { guard = treasuryConfig().guard; } catch { /* unconfigured */ }
- return { chainId: WHITECHAIN_CHAIN_ID, asset: isRehearsalToken() ? { symbol: 'rUSD', address: usdtAddress(), decimals: 6, rehearsal: true, qualifying: false } : { symbol: 'USDT', address: usdtAddress(), decimals: 6, rehearsal: false, qualifying: true }, configured: isTreasuryConfigured(), guard, presence: { provider: presenceProvider.id, mode: presenceProvider.mode }, execution: 'co-present-attested-relayer' };
+ return { chainId: WHITECHAIN_CHAIN_ID, asset: isRehearsalToken() ? { symbol: 'rUSD', address: usdtAddress(), decimals: 6, rehearsal: true, qualifying: false } : { symbol: 'USDT', address: usdtAddress(), decimals: 6, rehearsal: false, qualifying: true }, configured: isTreasuryConfigured(), guard, presence: { provider: currentProviders().presence.id, mode: currentProviders().presence.mode }, execution: 'co-present-attested-relayer' };
 }
 
 // ---------- Vault creation (gasless, guarded) ----------
@@ -73,7 +72,12 @@ export async function createWhitechainVault(body: Record<string, unknown>, opHea
  return arkivMutation('whitechain-vault', { name, creatorId, owners }, opId, creatorId, vault => {
   const safe = { address: deployed!.address, chainId: WHITECHAIN_CHAIN_ID as 1874, owners: deployed!.owners, threshold: deployed!.threshold, deploymentTxHash: deployed!.deploymentTxHash, saltNonce: deployed!.saltNonce, guard: deployed!.guard };
   applyAction(vault, 'register-safe', { name, creatorId, safe });
- }, vault => ({ ...applicationState(vault, creatorId), identityId: creatorId, vaultId: vault.groups.find(g => g.safe && g.safe.chainId === 1874 && g.safe.owners.join() === owners.join())?.id }));
+  return true;
+ }, (vault, created) => {
+  const group = vault.groups.find(g => g.safe && g.safe.chainId === 1874 && g.safe.owners.join() === owners.join());
+  if (group?.safe && created !== undefined) emit({ type: 'vault.created', vaultId: group.id, safe: group.safe.address, chainId: group.safe.chainId });
+  return { ...applicationState(vault, creatorId), identityId: creatorId, vaultId: group?.id };
+ });
 }
 
 // ---------- Proposals ----------
@@ -129,8 +133,8 @@ export async function startApprovalSession(body: Record<string, unknown>) {
   if (onchain !== safeTxHash) throw new StorageError('Safe transaction hash mismatch. No session was created.');
   for (const other of Object.values(ctx.journal.sessions)) if (other.vaultId === group.id && other.status === 'open') other.status = 'superseded';
   const id = randomUUID(), now = Date.now(), expiresAt = new Date(now + config.sessionSeconds * 1000).toISOString();
-  const challenge = await presenceProvider.createChallenge({ sessionId: id, vaultId: group.id, safeTxHash, expiresAt });
-  const session: Session = { id, proposalId, vaultId: group.id, safe: live.address, threshold: live.threshold, owners: live.owners, initiatorId, safeTx: { to: safeTx.to, value: '0', data, operation: 0, safeTxGas: safeTx.safeTxGas.toString(), baseGas: safeTx.baseGas.toString(), gasPrice: gasPrice.toString(), gasToken: safeTx.gasToken, refundReceiver: safeTx.refundReceiver, nonce: live.nonce.toString() }, safeTxHash, challenge, presence: { provider: presenceProvider.id, mode: presenceProvider.mode }, createdAt: new Date(now).toISOString(), expiresAt, approvals: [], status: 'open' };
+  const challenge = await currentProviders().presence.createChallenge({ sessionId: id, vaultId: group.id, safeTxHash, expiresAt });
+  const session: Session = { id, proposalId, vaultId: group.id, safe: live.address, threshold: live.threshold, owners: live.owners, initiatorId, safeTx: { to: safeTx.to, value: '0', data, operation: 0, safeTxGas: safeTx.safeTxGas.toString(), baseGas: safeTx.baseGas.toString(), gasPrice: gasPrice.toString(), gasToken: safeTx.gasToken, refundReceiver: safeTx.refundReceiver, nonce: live.nonce.toString() }, safeTxHash, challenge, presence: { provider: currentProviders().presence.id, mode: currentProviders().presence.mode }, createdAt: new Date(now).toISOString(), expiresAt, approvals: [], status: 'open' };
   ctx.journal.sessions[id] = session; await ctx.save();
   // Only the initiator receives `emit`. In simulated mode, members' session listings also carry the code (documented limitation).
   return { session: sessionView(session, vault, initiatorId), emit: { challengeId: challenge.challengeId, code: challenge.code, expiresAt } };
@@ -164,10 +168,10 @@ export async function approveInSession(body: Record<string, unknown>) {
   const retry = session.approvals.some(a => a.walletId === walletId);
   if (retry && session.approvals.length < session.threshold) throw new VaultError('You already approved in this session.');
   // 1. Personal object, verified fresh for this approval.
-  const object = await providers.objectMatching.verify({ identityId: wallet.id, address: wallet.address, objectName: wallet.object_name }, { objectName: str(body.objectName, 500), evidence: evidenceOf(body.objectEvidence) });
+  const object = await currentProviders().objectMatching.verify({ identityId: wallet.id, address: wallet.address, objectName: wallet.object_name }, { objectName: str(body.objectName, 500), evidence: evidenceOf(body.objectEvidence) });
   if (!object.accepted) throw new VaultError('Your personal object did not match.');
   // 2. Physically present in this session (same room, same time window).
-  const presence = await presenceProvider.verify({ sessionId, vaultId: session.vaultId, identityId: wallet.id, safeTxHash: session.safeTxHash, challenge: session.challenge }, evidenceOf(body.evidence));
+  const presence = await currentProviders().presence.verify({ sessionId, vaultId: session.vaultId, identityId: wallet.id, safeTxHash: session.safeTxHash, challenge: session.challenge }, evidenceOf(body.evidence));
   if (!presence.accepted) throw new VaultError('Presence was not verified for this session. Stay together and listen again.');
   // 3. The approver's own key signed exactly this Safe transaction.
   if (!/^0x[\da-f]{130}$/i.test(signature)) throw new VaultError('A 65-byte signature is required.');
@@ -233,6 +237,8 @@ async function recordSession(ctx: Ctx, session: Session) {
    const proposal = recordExecution(vault, { proposalId: session.proposalId, success: session.status === 'executed', txHash: session.txHash!, sessionId: session.id, approverIds, safeTxHash: session.safeTxHash, gasRefund: BigInt(session.gasRefund ?? '0') });
    await store.write(vault, previous);
    const invoice = vault.invoices.find(i => i.id === proposal.invoice_id && i.status === 'paid');
+   emit({ type: 'proposal.executed', proposalId: proposal.id, vaultId: proposal.group_id, txHash: session.txHash!, success: session.status === 'executed' });
+   if (invoice) emit({ type: 'invoice.paid', invoiceId: invoice.id, vaultId: invoice.group_id, txHash: session.txHash! });
    return invoice?.webhook_url ? { url: invoice.webhook_url, vaultId: invoice.group_id, payload: { type: 'invoice.paid', invoice: invoiceView(vault, invoice) } } : null;
   });
   session.recorded = true; await ctx.save();
@@ -281,7 +287,7 @@ function inboxVault(authorization: string | null) {
  return vaultId;
 }
 export class AuthError extends Error {}
-const allowPrivateWebhooks = () => process.env.TICHORI_WEBHOOK_ALLOW_PRIVATE === '1';
+const allowPrivateWebhooks = () => setting('TIJORI_WEBHOOK_ALLOW_PRIVATE') === '1';
 export async function vendorCreateInvoice(authorization: string | null, body: Record<string, unknown>) {
  const vaultId = inboxVault(authorization);
  return withState(async store => {
@@ -327,12 +333,14 @@ function scheduleWebhook(url: string, vaultId: string, payload: unknown) {
    // Re-check at delivery: DNS names must resolve only to public addresses (residual DNS-rebinding risk documented).
    if (!allowPrivateWebhooks() && !(await resolvesToPublicAddresses(new URL(url).hostname))) return;
    try {
-    const res = await fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5_000), headers: { 'Content-Type': 'application/json', 'Tichori-Signature': signWebhook(secret, body) }, body });
+    // Sign each attempt freshly. Tijori-Signature is current; Tichori-Signature is kept for existing receivers.
+    const signature = signWebhook(secret, body);
+    const res = await fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(5_000), headers: { 'Content-Type': 'application/json', 'Tijori-Signature': signature, 'Tichori-Signature': signature }, body });
     if (res.ok) return;
    } catch { /* retry */ }
   }
  };
- try { after(deliver); } catch { void deliver(); }
+ waitUntil(deliver());
 }
 
 // ---------- Treasury export and gas tank ----------

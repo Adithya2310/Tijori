@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { applyAction, emptyVault, publicState, validateVault } from '@tijori/core/vault';
 import { applyProximity, sessionView, validateProximity } from '@tijori/core/proximity';
-import { encryptState, decryptState } from '../lib/arkiv/codec.ts';
+import { encryptState, decryptState } from '@tijori/server/storage/codec';
 const address = (n: number) => `0x${n.toString(16).padStart(40, '0')}`;
 const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
 function fixture() {

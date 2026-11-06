@@ -1,4 +1,7 @@
-import Safe from '@safe-global/protocol-kit';
+import SafeImport from '@safe-global/protocol-kit';
+// protocol-kit's ESM build has a real default export, but its types are CJS-shaped under NodeNext resolution.
+type SafeClass = typeof SafeImport extends { init: unknown } ? typeof SafeImport : typeof SafeImport extends { default: infer D } ? D : never;
+const Safe = ((SafeImport as { default?: unknown }).default ?? SafeImport) as SafeClass;
 import { createPublicClient, decodeEventLog, decodeFunctionData, getAddress, http, isAddress, parseAbi, zeroAddress, type Hex } from 'viem';
 import { getProxyFactoryDeployment, getSafeL2SingletonDeployment, getCompatibilityFallbackHandlerDeployment } from '@safe-global/safe-deployments';
 import { baseSepolia } from 'viem/chains';

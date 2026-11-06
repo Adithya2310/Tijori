@@ -1,10 +1,9 @@
-import 'server-only';
 import { mkdir, open, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { decodeEventLog, encodeFunctionData, getAddress, keccak256, type Address, type Hex, type TransactionReceipt } from 'viem';
-import { durableJson } from '../arkiv/store.ts';
-import { StorageError } from '../db.ts';
+import { durableJson } from '../storage/arkiv.ts';
+import { StorageError } from '../storage/index.ts';
 import { VaultError } from '@tijori/core/vault';
 import { SAFE_141, SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID } from '@tijori/core/whitechain/chain';
 import { assertWhitechain, treasuryConfig, whitechainClient } from './config.ts';

@@ -1,10 +1,10 @@
-import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { formatEther, isAddress } from 'viem';
-import { withState, storageMode, StorageError } from '../db.ts';
+import { withState, storageMode, StorageError } from '../storage/index.ts';
 import { publicState, VaultError, type Vault } from '@tijori/core/vault';
-import { normalizeOwners, prepareSafe, SAFE_CHAIN_ID, verifySafeDeployment, readSafeStatus } from '../safe.ts';
-import { providers } from '../integrations/providers.ts';
+import { normalizeOwners, prepareSafe, SAFE_CHAIN_ID, verifySafeDeployment, readSafeStatus } from '../legacy-safe.ts';
+import { currentProviders } from '../context.ts';
+import '../providers.ts';
 import { readWhitechainSafe } from '../whitechain/safe.ts';
 import { isRehearsalToken } from '../whitechain/config.ts';
 import { formatUsdt } from '@tijori/core/whitechain/chain';
@@ -15,9 +15,9 @@ import { actionIdentity, applicationState, applyIntegratedAction, discoverReques
 export function capabilities() {
  return {
   version: 'v1', authentication: 'unauthenticated-local-demo', publicHostingSupported: false,
-  objectMatching: { provider: providers.objectMatching.id, mode: providers.objectMatching.mode },
-  physicalApproval: { provider: providers.physicalApproval.id, mode: providers.physicalApproval.mode },
-  externalVault: { provider: providers.externalVault.id, configured: providers.externalVault.configured },
+  objectMatching: { provider: currentProviders().objectMatching.id, mode: currentProviders().objectMatching.mode },
+  physicalApproval: { provider: currentProviders().physicalApproval.id, mode: currentProviders().physicalApproval.mode },
+  externalVault: { provider: currentProviders().externalVault.id, configured: currentProviders().externalVault.configured },
   onchainExecution: 'user-wallet-and-safe-app',
   whitechain: treasuryCapabilities(),
  };
@@ -61,16 +61,16 @@ export async function prepareDeployment(body: Record<string, unknown>) {
 export async function queryWorkflow(action: 'discover' | 'verify-object', body: Record<string, unknown>) {
  return withState(async store => {
   const { vault } = await store.read();
-  return action === 'discover' ? discoverRequests(vault, body, providers) : verifyObject(vault, body, providers);
+  return action === 'discover' ? discoverRequests(vault, body, currentProviders()) : verifyObject(vault, body, currentProviders());
  });
 }
 export async function verifyExternalApproval(body: Record<string, unknown>) {
- if (!providers.externalVault.configured) throw new IntegrationUnavailableError('External vault approval verification is not configured.');
+ if (!currentProviders().externalVault.configured) throw new IntegrationUnavailableError('External vault approval verification is not configured.');
  const { applicationId, identityAddress, vaultAddress, chainId, transactionHash } = body;
  if (typeof applicationId !== 'string' || !applicationId.trim() || applicationId.length > 100 || typeof identityAddress !== 'string' || !isAddress(identityAddress) || typeof vaultAddress !== 'string' || !isAddress(vaultAddress) || typeof chainId !== 'number' || !Number.isSafeInteger(chainId) || chainId <= 0 || typeof transactionHash !== 'string' || !/^0x[\da-f]{64}$/i.test(transactionHash)) throw new VaultError('An application, identity, vault, chain and exact transaction hash are required.');
  const evidence = evidenceFrom(body.evidence);
  if (!evidence) throw new VaultError('An evidence reference is required.');
- const verification = await providers.externalVault.verifyApproval({ applicationId, identityAddress, vaultAddress, chainId, transactionHash, evidence });
+ const verification = await currentProviders().externalVault.verifyApproval({ applicationId, identityAddress, vaultAddress, chainId, transactionHash, evidence });
  if (!verification.accepted) throw new VaultError('External vault approval was not verified.');
  return { verification, transactionHash, vaultAddress, chainId, executed: false };
 }
@@ -88,7 +88,7 @@ export async function mutate(action: string, body: Record<string, unknown>, oper
    try { actionBody = { ...body, safe: await verifySafeDeployment(body as Parameters<typeof verifySafeDeployment>[0]) }; }
    catch { throw new VaultError('Could not verify the Safe deployment on Base Sepolia. Check the deployment and try again.'); }
   }
-  const identityId = saved ? saved.identityId : await applyIntegratedAction(vault, action, actionBody, providers);
+  const identityId = saved ? saved.identityId : await applyIntegratedAction(vault, action, actionBody, currentProviders());
   if (!saved && action !== 'login') {
    vault.operations.push({ id, digest, ...(identityId ? { identityId } : {}) });
    vault.operations = vault.operations.slice(-100);
