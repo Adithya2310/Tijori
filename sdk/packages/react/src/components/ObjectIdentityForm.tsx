@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useId, useState } from 'react';
-import { OBJECT_IDENTITY_NAME, packObjectProfileV2, packObjectQuery, type ObjectProfileV2, type ObjectQuery } from '@tijori/core/object-profile';
+import { OBJECT_IDENTITY_NAME, packObjectProfileV2, packObjectQuery, packObjectView, type ObjectProfileV2, type ObjectQuery } from '@tijori/core/object-profile';
 import { createObjectIdentityV2, downloadObjectRecovery, listDeviceIdentities, listObjectUsernames, saveDeviceIdentity, type ObjectRecoveryV2, type ObjectScanResult } from '@tijori/client';
 import type { KeyEnvelope } from '@tijori/core/identity-key';
 import ObjectCapture from './ObjectCapture.tsx';
@@ -44,7 +44,9 @@ export default function ObjectIdentityForm({ mode, busy, onSubmit, onWorking }: 
   setWorking(true); onWorking(true); setError('');
   try {
    if (mode === 'login') { await onSubmit({ username: username.trim(), objectQuery: packObjectQuery(results[0].descriptor) }); return; }
-   const objectProfile = packObjectProfileV2(results.map(result => result.descriptor));
+   // A frozen camera stream can repeat a frame exactly; keep each distinct angle once.
+   const distinct = [...new Map(results.map(result => [packObjectView(result.descriptor), result.descriptor])).values()];
+   const objectProfile = packObjectProfileV2(distinct);
    const recovery = await createObjectIdentityV2(objectProfile);
    // Remember the new identity on this device before the server write, so an uncertain sign-up can be retried.
    await saveDeviceIdentity({ version: 1, name: username.trim(), status: 'pending', recovery });
