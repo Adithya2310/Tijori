@@ -20,9 +20,10 @@ The Tijori app in this repository uses the published [`@tijori/*` npm packages](
 | `package.json` | `"prebuild": "tijori-client prepare-assets public/tijori-assets"` |
 
 Everything else is app-specific and plugs into `<TijoriApp/>` slots:
-- [`app/legacy.tsx`](app/legacy.tsx): passphrase identities, Base Sepolia Safes and simulated transfers.
 - [`PhoneAccess`](app/components/PhoneAccess.tsx): LAN phone testing.
-- The Anon RPC diagnostic.
+- The Anon RPC diagnostic route (`/diagnostics/anon-rpc`, not linked from the app).
+
+The app shows one flow: object sign-up/login → a Whitechain vault with registered members → payouts that run once every member's device hears the payment code. Older passphrase identities, Base Sepolia Safes and standalone acoustic groups are no longer shown; their stored records stay readable through the API.
 
 The SDK is developed in [`sdk/`](sdk). It has its own install, tests, examples and releases, and its changes reach this app only as a new npm version. To try unreleased SDK changes in the app, run `npm run sdk:try-local`, then `npm ci` to go back.
 
@@ -32,29 +33,34 @@ The SDK is developed in [`sdk/`](sdk). It has its own install, tests, examples a
 - `@tijori/react`: a drop-in `<TijoriApp/>` and composable components.
 - `@tijori/invoices`: an SDK for vendors billing a vault.
 
-A DAO site or marketplace can add object sign-in, gasless Whitechain vaults with co-present approvals, and acoustic attendance with one backend route and one component. See [docs/SDK.md](docs/SDK.md) and the runnable [sdk/examples/dao-site](sdk/examples/dao-site).
+A DAO site or marketplace can add object sign-in and gasless Whitechain vaults whose payouts need every member together (an acoustic payment check) with one backend route and one component. See [docs/SDK.md](docs/SDK.md) and the runnable [sdk/examples/dao-site](sdk/examples/dao-site).
 
-New identities are a username linked to a personal object: the browser computes DINOv2 descriptors of the isolated object, and the server matches the login photo against the enrolled object before releasing any key material (see "Object sign-in" below). It distinguishes different objects but is not secure authentication. Existing passphrase identities retain their original login path. Acoustic checks use real ggwave WASM, browser audio and opt-in microphone access, with sessions and matches persisted in the encrypted Arkiv aggregate. A match is a cooperative demo, not proof of physical proximity or identity; challenges can be replayed or relayed. Existing demo vaults and their requests remain simulated. New Safe vaults have real testnet contracts and signer-enforced thresholds; their transactions are handled in the Safe app, not by the demo approval flow. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
+New identities are a username linked to a personal object: the browser computes DINOv2 descriptors of the isolated object, and the server matches the login photo against the enrolled object before releasing any key material (see "Object sign-in" below). It distinguishes different objects but is not secure authentication. The payment check uses real ggwave WASM, browser audio and opt-in microphone access: the initiator's device plays a 6-character code and every member's device must hear it. It shows the devices were within earshot during the check, not who holds them; a code can be replayed or relayed. Whitechain vaults are real testnet Safes whose guard enforces the all-member threshold and the attestation on-chain. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
 
-## Wi-Fi acoustic testing without Arkiv
+## Two-device demo on Wi-Fi (local storage)
 
-For the current two-device test, set `TIJORI_STORAGE_MODE=local` in your ignored `.env.local`, then run `npm run dev:phone`. No Arkiv credentials or testnet funds are required in this mode. Open the printed HTTPS Wi-Fi URL on both devices (or `https://localhost:3443` on the laptop), on the same trusted network. Handle the local certificate warning yourself.
+For the two-device demo, set `TIJORI_STORAGE_MODE=local` in your ignored `.env.local`, then run `npm run dev:phone`. No Arkiv credentials are needed in this mode. Vault deployments and payouts still go to Whitechain testnet, so the server needs its Whitechain treasury settings (see "Run it" below). Open the printed HTTPS Wi-Fi URL on both devices (or `https://localhost:3443` on the laptop), on the same trusted network. Handle the local certificate warning yourself.
 
-1. Create a different synthetic object-demo identity on each device on that device. Optional backups are under **Optional backup / move an existing identity**. Original photos and masks stay on that device. New compact feature references are saved to the selected encrypted server store; older full references remain local.
-2. On one device choose **Create acoustic group**. Under **Registered people**, add the other enrolled user, enter a group name and create it. Users and groups refresh automatically every 2.5 seconds; both devices can open the same group.
-3. In **Acoustic proximity check**, press **Send** on the laptop/device playing the sound. On the other device press **Join check**, allow microphone access, keep the page open and hold it near the speaker. Choose **Ultrasound broadcast** before Send for the high-frequency protocol, or leave it off for audible testing. The receiving device detects both automatically. Use device speakers, without headphones. A successful decode shows **Signal matched** on both devices’ member lists.
+1. **Sign up on each device** with a different username and object. Photos and masks stay on that device.
+2. **Create the vault on one device:** choose **Create vault**, name it, and add the other people from **Registered people** (new sign-ups appear automatically). The relayer deploys a guarded Safe that needs every member for each payout. Send test USDT to the vault address.
+3. **Propose a payment** (recipient and amount).
+4. **Start the payment check:** the proposer taps **Start payment check**; their device plays the payment code. Leave **Ultrasound payment code** off for audible, most reliable testing, or turn it on for the high-frequency band.
+5. **Join on every other device:** open the vault, tap **Join payment check** and allow the microphone, near the playing device. Each device that hears the code signs with its own key.
+6. **Paid:** when every member has been heard, the verifier attests, the relayer executes through the guard and the proposal shows **Paid** with a Whitechain receipt.
 
-The laptop stores users, encrypted identity envelopes, groups, challenges and matches in `data/local-demo/state.json`, encrypted with the independent `data/local-demo/encryption.key`. Both are private Git-ignored local files. Concurrent requests/processes share an exclusive file lock; writes are atomic and synced. Restarting preserves identities/groups/matches, while two-minute challenges still expire normally. Polling never rewrites the database. Missing/corrupt initialized state or a missing key fails closed. Keep the key with the database privately; do not delete either while testing. A stopped process can leave `state.lock`; inspect it before any manual recovery.
+Use device speakers, without headphones. A check lasts two minutes (`APPROVAL_SESSION_SECONDS`).
 
-The UI labels this **LOCAL WI-FI TEST**. The default remains Arkiv unless explicitly configured otherwise; there is no automatic fallback when Arkiv fails. Local mode makes no Arkiv calls, never uses its signer/journal/budget, and disables Safe registration. Both modes use the same v5 domain schema and acoustic protocol. Switching back to `TIJORI_STORAGE_MODE=arkiv` selects the existing separate Arkiv state; local records are not automatically migrated, merged or uploaded. SQLite remains a read-only migration source. This unauthenticated demo belongs only on a trusted test LAN. Real acoustic decoding is not proof of proximity or identity and never authorizes transactions.
+The laptop stores users, encrypted identity envelopes and vault records in `data/local-demo/state.json`, encrypted with the independent `data/local-demo/encryption.key`. Both are private Git-ignored local files. Concurrent requests/processes share an exclusive file lock; writes are atomic and synced. Restarting preserves identities/groups/matches, while two-minute challenges still expire normally. Polling never rewrites the database. Missing/corrupt initialized state or a missing key fails closed. Keep the key with the database privately; do not delete either while testing. A stopped process can leave `state.lock`; inspect it before any manual recovery.
+
+The UI labels this **LOCAL WI-FI TEST**. The default remains Arkiv unless explicitly configured otherwise; there is no automatic fallback when Arkiv fails. Local mode makes no Arkiv calls, never uses its signer/journal/budget, and disables registering existing Base Sepolia Safes. Both modes use the same v5 domain schema and acoustic protocol. Switching back to `TIJORI_STORAGE_MODE=arkiv` selects the existing separate Arkiv state; local records are not automatically migrated, merged or uploaded. SQLite remains a read-only migration source. This unauthenticated demo belongs only on a trusted test LAN. Real acoustic decoding is not proof of proximity or identity.
 
 ## Whitechain treasury: co-present approvals for DAOs and large vaults
 
-Tijori is a treasury for DAOs, teams and families. A payout from the vault needs a **majority of its signers, physically together in one place**, and **each approver verifies with their personal object**. On Whitechain this becomes an on-chain rule, not a UI convention:
+Tijori is a treasury for DAOs, teams and families. A payout from the vault needs **every member, together in one place**: each member's device hears the payment code, and each member's own key (unlocked when they logged in with their personal object) signs. On Whitechain this becomes an on-chain rule, not a UI convention:
 
-- **The vault is a Safe 1.4.1 on Whitechain Sepolia** with a majority threshold. Its owners are the members' Tijori identity keys, which are generated and encrypted in the browser and unlocked by the person.
+- **The vault is a Safe 1.4.1 on Whitechain Sepolia** whose threshold is all of its owners (vaults created before 0.2.0 kept a majority). Its owners are the members' Tijori identity keys, which are generated and encrypted in the browser and unlocked by the person.
 - **`TichoriPresenceGuard`** is installed when the Safe is created. Every execution must carry a fresh EIP-712 co-presence attestation from the vault's Tijori verifier for exactly that Safe transaction, and the threshold signers must be the attested owners. Executing from the Safe app, or any path without the attestation, reverts. A unanimous-owner escape hatch can only remove the guard or rotate the verifier.
-- **Signers never touch crypto.** Approving is: show your object, have your phone hear the room code, tap Approve. That produces a free EIP-712 signature in the browser. There is no seed phrase, wallet popup, WBT or chain name. Tijori's relayer pays the gas, and **the vault refunds it in USDT** through Safe's native gas refund, capped by what the signers signed.
+- **Signers never touch crypto.** Approving is: open the vault near the person who started the payment check and tap **Join payment check**; your device hears the code and your key signs. That produces a free EIP-712 signature in the browser. There is no seed phrase, wallet popup, WBT or chain name. Tijori's relayer pays the gas, and **the vault refunds it in USDT** through Safe's native gas refund, capped by what the signers signed.
 - **Vendors bill the treasury** through an invoice inbox: the `@tijori/invoices` SDK plus signed `invoice.paid` webhooks, a public receipt and an accountant CSV.
 
 **Why this needs on-chain stablecoin settlement on Whitechain:**
@@ -66,8 +72,8 @@ Tijori is a treasury for DAOs, teams and families. A payout from the vault needs
 ```
 Vendor app ──@tijori/invoices──► POST /api/v1/invoices ──► invoice inbox (encrypted Arkiv aggregate, vault v6)
 Signer ──► POST /api/v1/proposals ──► POST /api/v1/approval-sessions (fixes SafeTx at live nonce, presence challenge)
-Each signer in the room: object check + presence (room code) + own EIP-712 Safe signature ──► POST /api/v1/physical-approvals
-Majority in ONE session ──► verifier signs CoPresence attestation ──► relayer ──► TichoriPresenceGuard.executeWithAttestation
+Initiator's device plays the 6-character code (ggwave). Every member's device hears it ──► code + own EIP-712 Safe signature ──► POST /api/v1/physical-approvals
+All members in ONE session ──► verifier signs CoPresence attestation ──► relayer ──► TichoriPresenceGuard.executeWithAttestation
                                                                                    └► Safe.execTransaction: USDT → vendor; USDT gas refund → relayer
 Receipt: /invoice/[id] · webhook invoice.paid (HMAC) · GET /api/v1/treasury/export (CSV) · GET /api/v1/relayer (gas tank)
 ```
@@ -108,7 +114,7 @@ Receipt: /invoice/[id] · webhook invoice.paid (HMAC) · GET /api/v1/treasury/ex
 4. **Fill in `.env`.** Set `TIJORI_GUARD_ADDRESS` and `TIJORI_SAFE_SETUP_ADDRESS` from the script output. Set `WHITECHAIN_RELAYER_PRIVATE_KEY`, plus a separate `TIJORI_VERIFIER_PRIVATE_KEY` (`cast wallet new`, no funds). See `.env.example` for the optional limits.
 5. **Start the app.** Run `npm run build && npm start -- --hostname 127.0.0.1`.
 6. **Create and fund a vault.** Sign up each signer, then **Create vault**: it is gasless, and the relayer deploys the guarded Safe. Send test USDT to the vault address.
-7. **Pay out.** **Propose payment** (or pay an inbox invoice), then **Start approval session**. Each signer in the room approves. At the majority, the payout executes on Whitechain.
+7. **Pay out.** **Propose payment** (or pay an inbox invoice), then **Start payment check**. Every member taps **Join payment check** near the playing device. When all members are heard, the payout executes on Whitechain.
 
 **How the business side pays for gas, and why the relayer can't be drained:**
 - **Who pays:** the relayer pays WBT, and each payout refunds it in USDT from the vault. The fee is part of the signed Safe transaction, so it can't be inflated.
@@ -141,9 +147,9 @@ While it's set, the vault shows a **REHEARSAL TOKEN** flag and `capabilities()` 
 - `npm test`: the app's tests, run against the published packages (`npm run build` first).
 - `npm run sdk:test:whitechain`: the local SDK server against a local anvil chain (id 1874) with canonical Safe bytecode and mock USDT. It covers:
   - gasless vault creation and the vendor invoice
-  - wrong object, presence or key, each rejected at zero cost
+  - registered members only; a wrong code, key or (older identities) object, each rejected at zero cost
   - the guard blocking un-attested execution
-  - the majority payout with a USDT gas refund
+  - no payout at 2 of 3; the all-member payout with a USDT gas refund
   - the signed webhook and the CSV export
   - separate sessions never combining
 
@@ -151,12 +157,11 @@ No testnet funds are spent by tests.
 
 ### Current limitations (honest)
 
-- **Simulated checks:** object matching and the ultrasonic presence check are **simulated providers** in this repo.
-  - The real implementations plug into `ObjectMatchingProvider` and `PresenceSessionProvider` (`sdk/packages/core/src/integrations.ts`; pass replacements as `createTijoriServer({ providers })`).
-  - The UI calls `<TijoriProvider onPresenceEmit>` and emits `tijori:presence-emit` (plus the deprecated `tichori:presence-emit`). Approvers use `<TijoriProvider presence>` or `window.tijoriPresence.listen()` (`window.tichoriPresence` still works).
-  - Frequency matching alone does not prove proximity: relay and replay must be handled by the real provider.
-- **Simulated room code is visible to members:** in simulated presence mode, members' session listings include the room code so the flow can be demonstrated without audio. In live mode only the initiator's device receives it.
-- **What a majority can still do:** the guard does not restrict *what* a co-present, attested majority approves. The server only builds USDT payouts, but the Safe would accept any attested transaction the owners sign, including adding modules. Safe 1.4.1 module transactions are not checked by transaction guards.
+- **The payment check is acoustic, not a proof of place:** the server's `ggwave-acoustic` presence provider sends the 6-character code only to the initiator, whose device plays it; members' devices must hear it. A code can be replayed or relayed (for example over a call), and it says nothing about who holds a device.
+  - Providers are replaceable (`PresenceSessionProvider` in `sdk/packages/core/src/integrations.ts`, `createTijoriServer({ providers })`). `simulatedPresenceProvider` is available for audio-free tests; it shows the code to every member.
+  - Custom audio stacks can use `<TijoriProvider onPresenceEmit>` / `<TijoriProvider presence>` (or `window.tijoriPresence.listen()`); otherwise the built-in modem is used.
+- **Object proof happens at login:** approving does not take a new photo. The signing key is released only after an object match at login, so anyone with a backup file or the server's data could still sign (see "Object sign-in").
+- **What all owners can still do:** the guard does not restrict *what* a co-present, attested set of owners approves. The server only builds USDT payouts, but the Safe would accept any attested transaction the owners sign, including adding modules. Safe 1.4.1 module transactions are not checked by transaction guards.
 - **Trusted verifier:** the verifier is a trusted Tijori server key. The guard enforces that its attestation exists and matches, but cannot itself prove where anyone was.
 - **No authentication yet:** the API is still unauthenticated (identity IDs are demo selectors). Bind to localhost; a phone/camera/mic demo needs an HTTPS tunnel and deliberate exposure.
 - **Login:** it still asks for the public address. The identity key is unlocked with the passphrase for signing and kept in tab memory only.
@@ -180,7 +185,7 @@ Requires Node.js 22.20+ and a persistent writable filesystem. Bind the demo to l
 6. For existing SQLite data, stop the app and run `npm run arkiv:migrate` **before the first signup**. It encrypts existing records, verifies receipt and exact state readback, preserves IDs, invitations and optional SQLite proximity session/match history, and leaves `data/vault.sqlite` untouched. Migration refuses to overwrite existing Arkiv state. Invalid legacy relations or duplicate codes fail validation for explicit repair.
 7. Run `npm run dev -- --hostname 127.0.0.1` and open http://localhost:3000.
 
-Without a legacy database, the first valid signup creates the Arkiv entity. New signup uses the object-only experimental flow below. Existing passphrase identities can log in using **Use existing passphrase identity**: their AES-256-GCM envelopes remain protected by PBKDF2-SHA256 with 600,000 iterations and a random salt. Plaintext identity keys and user passphrases never go to the API or browser storage. The unauthenticated server does not enforce the browser check. On Whitechain vaults the identity key is the Safe signer: it signs approvals in the browser after a local unlock and is kept in tab memory only. Create vault deploys a presence-guarded Safe on Whitechain Sepolia through the relayer (no wallet or gas), with your identity address and the other signers' Tijori addresses as owners and a strict-majority threshold. The relayer verifies the deployment, owners, threshold, guard and verifier on-chain before the vault is stored; see the Whitechain section above. Vaults created earlier on Base Sepolia keep their previous behavior: MetaMask deployment, ETH balance, and transactions in the Safe app. The separate Acoustic proximity check section uses audio; its Send button never creates, signs or authorizes a transfer.
+Without a legacy database, the first valid signup creates the Arkiv entity. New signup uses the object-only experimental flow below. Existing passphrase identities are no longer offered in the app UI, but the API still supports them: their AES-256-GCM envelopes remain protected by PBKDF2-SHA256 with 600,000 iterations and a random salt. Plaintext identity keys and user passphrases never go to the API or browser storage. The unauthenticated server does not enforce the browser check. On Whitechain vaults the identity key is the Safe signer: it signs approvals in the browser after a local unlock and is kept in tab memory only. Create vault deploys a presence-guarded Safe on Whitechain Sepolia through the relayer (no wallet or gas), with your identity address and the other signers' Tijori addresses as owners and a strict-majority threshold. The relayer verifies the deployment, owners, threshold, guard and verifier on-chain before the vault is stored; see the Whitechain section above. Vaults created earlier on Base Sepolia keep their previous behavior: MetaMask deployment, ETH balance, and transactions in the Safe app. The separate Acoustic proximity check section uses audio; its Send button never creates, signs or authorizes a transfer.
 
 Deployment progress is kept in browser local storage. If deployment succeeded but saving to Arkiv failed, use Resume deployment. If the wallet submission outcome is unknown, enter the existing transaction hash from the wallet; the app will verify it rather than deploy again. Preserve browser data until registration succeeds. If the wallet transaction reverted, reconcile it before attempting a new deployment.
 
@@ -205,7 +210,9 @@ The Arkiv MCP supplied network/schema/SDK guidance. Application reads and local 
 
 Run `npm run sdk:test` for the SDK, `npm run build` before `npm test` for the app, then `npm run lint`. The test suite uses a local RPC fixture and a throwaway signer, encryption key and journal directory. It exercises the real SDK encoding, signed transactions, API flow, receipt recovery and error guards without spending testnet funds. Fixture results do not establish live Rabdi persistence; `arkiv:check` and an authorized migration/write with readback establish that separately. `npm run arkiv:verify` performs a paid storage update of the same vault contents with a fresh encrypted envelope and verifies the receipt and exact readback.
 
-## Acoustic checks on Arkiv
+## Standalone acoustic checks (API only)
+
+The app no longer shows standalone acoustic groups: the acoustic check is part of each vault payout. The proximity API (`/api/v1/proximity`) and `<ProximityCheck>` / `<TijoriApp createMode="acoustic-group">` remain for integrators. With them:
 
 1. Sign up with a different synthetic identity on each device. Copy each generated public identity address from My vaults.
 2. Choose **Create acoustic group**, enter a name and the other enrolled identity addresses. This stores a group in Arkiv without deploying a Safe. Members refresh My vaults and open the same group.
@@ -236,7 +243,7 @@ An identity is a **username linked to a personal object**. You log in with the u
    4. Click **Register username & object**.
 2. **Log in:** enter the username, take one photo of the object and click **Log in with my object**.
 3. Every photo shows its cut-out (what was scanned). If it isn't just your object, click **Not your object? Brush over it**, paint over the object and click **Use my brushing**. For a sign-up scan, one brushing applies to all three angles.
-4. Payout approvals in a Whitechain vault ask for one fresh photo too. It is checked on the server together with presence and your own signature.
+4. Payout approvals in a Whitechain vault need no new photo: your device hears the payment code and the key unlocked at login signs. After a reload, the vault asks for one photo to unlock the key again.
 
 **How matching works**
 1. **On this device:**

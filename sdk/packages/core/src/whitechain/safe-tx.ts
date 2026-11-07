@@ -58,10 +58,12 @@ export function attestationTypedData(chainId: number, guard: Address, attestatio
 }
 
 export const majority = (owners: number) => Math.floor(owners / 2) + 1;
+/** New vaults need every owner to approve a payout (vaults created before 0.2.0 kept a majority threshold). */
+export const vaultThreshold = (owners: number) => owners;
 /** Safe setup that installs the presence guard and verifier atomically at creation. */
 export function guardedInitializer(input: { owners: Address[]; setup: Address; guard: Address; verifier: Address; fallbackHandler: Address }) {
  const data = encodeFunctionData({ abi: setupHookAbi, functionName: 'setupGuard', args: [input.guard, input.verifier] });
- return encodeFunctionData({ abi: safeSetupAbi, functionName: 'setup', args: [input.owners, BigInt(majority(input.owners.length)), input.setup, data, input.fallbackHandler, zeroAddress, 0n, zeroAddress] });
+ return encodeFunctionData({ abi: safeSetupAbi, functionName: 'setup', args: [input.owners, BigInt(vaultThreshold(input.owners.length)), input.setup, data, input.fallbackHandler, zeroAddress, 0n, zeroAddress] });
 }
 /** CREATE2 address used by SafeProxyFactory 1.4.1 createProxyWithNonce. */
 export function predictSafeAddress(input: { factory: Address; singleton: Address; proxyCreationCode: Hex; initializer: Hex; saltNonce: bigint }) {

@@ -1,4 +1,5 @@
-import { randomInt, randomUUID, sha256Hex } from './random.ts';
+import { randomUUID, sha256Hex } from './random.ts';
+import { ACOUSTIC_CODE_PATTERN, newAcousticCode } from './acoustic-code.ts';
 import { VaultError, type Vault } from './vault.ts';
 
 export type ProximitySession = {
@@ -33,9 +34,8 @@ export function applyProximity(vault: Vault, b: Record<string, unknown>, operati
    return { changed: false, session: sessionView(previous, now), ...(previous === s && !previous.cancelled && previous.expiresAt > now ? { nonce: previous.nonce } : {}) };
   }
   if (s && !s.cancelled && s.expiresAt > now) throw new VaultError('A check is already active. Join it or wait for it to finish.');
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let nonce: string;
-  do { nonce = Array.from({ length: 6 }, () => chars[randomInt(chars.length)]).join(''); } while (vault.proximitySessions.some(s => s.nonce === nonce));
+  do { nonce = newAcousticCode(); } while (vault.proximitySessions.some(s => s.nonce === nonce));
   s = { id: randomUUID(), groupId, hostId: walletId, nonce, createdAt: now, expiresAt: now + 120000, cancelled: false, operationId, matches: [] };
   vault.proximitySessions.push(s);
   return { changed: true, session: sessionView(s, now), nonce };
@@ -64,7 +64,7 @@ export function validateProximity(vault: Vault) {
  const id = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 100;
  if (!Array.isArray(sessions) || !sessions.every(s => {
   const group = vault.groups.find(g => g.id === s?.groupId);
-  return s && id(s.id) && id(s.operationId) && group?.memberIds.includes(s.hostId) && typeof s.nonce === 'string' && /^[A-Z0-9]{6}$/.test(s.nonce)
+  return s && id(s.id) && id(s.operationId) && group?.memberIds.includes(s.hostId) && typeof s.nonce === 'string' && ACOUSTIC_CODE_PATTERN.test(s.nonce)
    && Number.isSafeInteger(s.createdAt) && s.createdAt >= 0 && Number.isSafeInteger(s.expiresAt) && s.expiresAt === s.createdAt + 120000 && typeof s.cancelled === 'boolean'
    && Array.isArray(s.matches) && unique(s.matches.map(m => m?.walletId)) && s.matches.every(m => m && m.walletId !== s.hostId && group.memberIds.includes(m.walletId)
     && Number.isSafeInteger(m.verifiedAt) && m.verifiedAt >= s.createdAt && m.verifiedAt < s.expiresAt && typeof m.attestationHash === 'string' && /^[a-f0-9]{64}$/.test(m.attestationHash));

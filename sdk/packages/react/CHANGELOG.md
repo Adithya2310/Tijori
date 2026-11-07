@@ -11,6 +11,7 @@
   - Sign-up is a username plus a one-tap scan (3 angles, object at the centre, no tapping or dragging).
   - Login is the username plus one photo.
   - The server matches the photo's descriptor against the enrolled object and releases the key envelope only on a match. A different object (a pen for a bottle) is refused, and repeated wrong objects are throttled.
+  - **One payout flow: every member together.** A vault is created from registered people, and every payout runs only after a payment check: the initiator's device plays a 6-character code (audible or ultrasound, ggwave), every member's device hears it and each member's own key signs. No extra photo: the key was unlocked by the object login.
 
   What changes underneath:
 
@@ -36,6 +37,9 @@
   - Object identities from scanner v1 must sign up again.
   - `listServerIdentities` is replaced by `listObjectUsernames`.
   - `ObjectCapture` takes `mode` and `onResult`.
+  - New Whitechain vaults need every owner (Safe threshold = owners; earlier majority vaults keep working), and every member must be a registered identity.
+  - The default presence provider is `ggwave-acoustic` (live): the code goes only to the initiator and is never listed. `simulatedPresenceProvider` is the opt-in audio-free variant.
+  - `TijoriApp` shows only Whitechain vaults and no standalone acoustic groups (`createMode="acoustic-group"` or `renderVault` bring them back); `CreateVault` picks members from Registered people.
 
 ### Patch Changes
 

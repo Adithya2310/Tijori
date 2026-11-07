@@ -8,7 +8,7 @@ import { StorageError } from '../storage/index.ts';
 import { VaultError } from '@tijori/core/vault';
 import { SAFE_141, SAFE_GUARD_SLOT, WHITECHAIN_CHAIN_ID } from '@tijori/core/whitechain/chain';
 import { assertWhitechain, treasuryConfig, whitechainClient } from './config.ts';
-import { factoryAbi, guardAbi, guardedInitializer, majority, predictSafeAddress, safeAbi } from '@tijori/core/whitechain/safe-tx';
+import { factoryAbi, guardAbi, guardedInitializer, predictSafeAddress, safeAbi, vaultThreshold } from '@tijori/core/whitechain/safe-tx';
 
 export type SessionApproval = { walletId: string; address: Address; signature: Hex; at: string; objectMode: string; presenceMode: string };
 export type Session = {
@@ -126,7 +126,7 @@ export async function relay(ctx: { journal: TreasuryJournal; save: () => Promise
  return receipt;
 }
 
-/** Gasless creation of a guarded majority Safe. `opId` makes retries resume the same deployment. */
+/** Gasless creation of a guarded Safe that needs every owner to approve. `opId` makes retries resume the same deployment. */
 export async function deployGuardedSafe(opId: string, owners: Address[]) {
  return withTreasury(async ctx => {
   const { journal, save, config } = ctx;
@@ -164,7 +164,7 @@ export async function deployGuardedSafe(opId: string, owners: Address[]) {
    client.readContract({ address: config.guard, abi: guardAbi, functionName: 'verifier', args: [deploy.address] }),
   ]);
   const sameOwners = onchainOwners.length === owners.length && onchainOwners.every(o => owners.some(x => x.toLowerCase() === o.toLowerCase()));
-  if (!sameOwners || Number(threshold) !== majority(owners.length) || !guardSlot || getAddress(`0x${guardSlot.slice(-40)}`) !== config.guard || getAddress(verifier) !== config.verifier.address) throw new VaultError('The deployed vault does not match the requested guarded configuration.');
+  if (!sameOwners || Number(threshold) !== vaultThreshold(owners.length) || !guardSlot || getAddress(`0x${guardSlot.slice(-40)}`) !== config.guard || getAddress(verifier) !== config.verifier.address) throw new VaultError('The deployed vault does not match the requested guarded configuration.');
   deploy.txHash ??= journal.confirmed?.[opId]?.hash; // confirmed by an earlier reconcile
   if (!deploy.txHash) throw new StorageError('The vault exists but its deployment transaction is unknown. Reconcile manually.');
   deploy.status = 'deployed'; await save();

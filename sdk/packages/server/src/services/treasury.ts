@@ -5,7 +5,7 @@ import { applyAction, VaultError, type Vault } from '@tijori/core/vault';
 import { currentProviders, emit, setting, waitUntil } from '../context.ts';
 import '../providers.ts';
 import { IntegrationUnavailableError } from '@tijori/core/integrations';
-import { validObjectQuery } from '@tijori/core/object-profile';
+import { OBJECT_IDENTITY_NAME, validObjectQuery } from '@tijori/core/object-profile';
 import { applicationState, REENROLL_MESSAGE } from '@tijori/core/api/domain';
 import { LEGACY_DINO_OBJECT_NAME } from '@tijori/core/legacy';
 import type { ApprovalSession, InboxKeyResponse, InvoiceReceipt, RelayerStatus, StartSessionResponse } from '@tijori/core/api/types';
@@ -69,6 +69,9 @@ export async function createWhitechainVault(body: Record<string, unknown>, opHea
  if (!members.length || members.length > 31 || !members.every(a => isAddress(a))) throw new VaultError('Add 1-31 valid signer addresses.');
  const owners = [getAddress(creator.address!), ...members.map(a => getAddress(a))];
  if (new Set(owners.map(o => o.toLowerCase())).size !== owners.length) throw new VaultError('Each signer address must be unique and different from yours.');
+ // Every owner must approve each payout, so every owner needs an identity that can sign and join the acoustic check.
+ const enrolled = await withState(async store => (await store.read()).vault.wallets.filter(w => w.address && w.object_name && w.keyEnvelope).map(w => w.address!.toLowerCase()));
+ if (!members.every(a => enrolled.includes(a.toLowerCase()))) throw new VaultError('Every member needs a Tijori identity: sign up on their device first, then pick them from Registered people.');
  const already = await withState(async store => (await store.read()).vault.operations.find(o => o.id === opId));
  if (already && already.digest !== digestOf('whitechain-vault', { name, creatorId, owners })) throw new VaultError('This operation ID was already used with different input.');
  const deployed = already ? null : await deployGuardedSafe(opId, owners);
@@ -171,12 +174,15 @@ export async function approveInSession(body: Record<string, unknown>) {
   if (wallet.object_name === LEGACY_DINO_OBJECT_NAME) throw new VaultError(REENROLL_MESSAGE);
   const retry = session.approvals.some(a => a.walletId === walletId);
   if (retry && session.approvals.length < session.threshold) throw new VaultError('You already approved in this session.');
-  // 1. Personal object, verified fresh for this approval.
-  const object = await currentProviders().objectMatching.verify({ identityId: wallet.id, address: wallet.address, objectName: wallet.object_name, ...(wallet.objectProfile ? { objectProfile: wallet.objectProfile } : {}) }, { objectName: str(body.objectName, 500), ...(validObjectQuery(body.objectQuery) ? { objectQuery: body.objectQuery } : {}), evidence: evidenceOf(body.objectEvidence) });
+  // 1. Personal object. Scanner v2 identities proved it at login: the server released the encrypted key that signs
+  //    below only after their object matched, so no new photo is needed (a photo, if sent, is still checked).
+  //    Older identities check their object description on every approval.
+  const provenAtLogin = wallet.object_name === OBJECT_IDENTITY_NAME && !!wallet.objectProfile && !validObjectQuery(body.objectQuery);
+  const object = provenAtLogin ? { accepted: true, mode: 'login' } : await currentProviders().objectMatching.verify({ identityId: wallet.id, address: wallet.address, objectName: wallet.object_name, ...(wallet.objectProfile ? { objectProfile: wallet.objectProfile } : {}) }, { objectName: str(body.objectName, 500), ...(validObjectQuery(body.objectQuery) ? { objectQuery: body.objectQuery } : {}), evidence: evidenceOf(body.objectEvidence) });
   if (!object.accepted) throw new VaultError('Your personal object did not match.');
-  // 2. Physically present in this session (same room, same time window).
+  // 2. This device heard the session's acoustic code (same room, same time window).
   const presence = await currentProviders().presence.verify({ sessionId, vaultId: session.vaultId, identityId: wallet.id, safeTxHash: session.safeTxHash, challenge: session.challenge }, evidenceOf(body.evidence));
-  if (!presence.accepted) throw new VaultError('Presence was not verified for this session. Stay together and listen again.');
+  if (!presence.accepted) throw new VaultError('This device did not hear the payment code. Stay together and listen again.');
   // 3. The approver's own key signed exactly this Safe transaction.
   if (!/^0x[\da-f]{130}$/i.test(signature)) throw new VaultError('A 65-byte signature is required.');
   let signer: Address;

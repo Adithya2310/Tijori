@@ -67,4 +67,5 @@
 .tj-camera-frame{position:relative}.tj-camera-frame[hidden]{display:none}.tj-camera-guide{position:absolute;left:50%;top:50%;height:70%;width:auto;aspect-ratio:1;transform:translate(-50%,-50%);border:2px dashed #ffffffcc;border-radius:50%;box-shadow:0 0 0 999px #00000033;pointer-events:none}
 .tj-scan-thumbs{display:flex;gap:8px;flex-wrap:wrap}.tj-scan-thumb{width:96px;height:96px;object-fit:contain;border-radius:8px;border:1px solid var(--tj-line);background:#fff}
 .tj-brush-pad{display:grid;gap:10px}.tj-brush-canvas{display:block;width:100%;height:auto;border-radius:9px;touch-action:none;cursor:crosshair;background:#eff3eb}
+.tj-payment-check{border:1px solid var(--tj-line);border-radius:14px;padding:22px;margin:0 0 18px;background:#fbfdfa}.tj-payment-check h2{font-family:var(--tj-font-display,'DM Serif Display',serif);font-size:26px;font-weight:400;margin:6px 0}.tj-payment-check .tj-dial-wrap{margin:14px 0}.tj-payment-check .tj-camera-actions{display:flex;justify-content:center;gap:10px;margin:8px 0}.tj-payment-check label{display:block;font-size:11px;font-weight:700;color:#5c675d;margin:10px 0}.tj-payment-check meter{display:block;width:100%}
 }

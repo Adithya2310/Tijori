@@ -3,9 +3,9 @@
 Add Tijori's co-present treasury to your own DAO site, marketplace or community app. Your users get:
 
 - **Object sign-up and sign-in.** The camera and on-device DINOv2 matching run in the browser; photos never leave the device.
-- **Whitechain vaults.** Each vault is a gasless Safe with the Tijori presence guard, holding USDT. Payouts need a majority of signers to approve together in one session.
+- **Whitechain vaults.** Each vault is a gasless Safe with the Tijori presence guard, holding USDT, created from registered members. Every payout needs all members together: in a payment check the initiator's device plays a code, every member's device hears it and each member's key signs.
 - **Treasury tools.** Payout proposals, a vendor invoice inbox with signed webhooks, CSV export and a relayer gas tank.
-- **Acoustic proof of attendance.** A two-minute ultrasound or audible challenge, broadcast on one device and heard by the others.
+- **Acoustic payment check.** Built into each vault payout: an audible or ultrasound code (ggwave), two minutes, every member. The older standalone attendance check (`ProximityCheck`, `createMode="acoustic-group"`) is still exported.
 
 > **Prototype.** This is a hackathon-grade demo on testnets. The HTTP API is unauthenticated. The object check runs on your server and tells different objects apart, but it is not authentication: identical objects match, and stored profiles can unlock keys. Acoustic matches can be replayed or relayed and do not prove physical proximity. Use test tokens only, never real funds or personal data, and do not expose the API publicly. The repository [README](../README.md) states the full threat model.
 
@@ -64,7 +64,7 @@ Settings without credentials:
 - Never reuse one private key for two roles.
 - Keep every secret server-side: never use a `NEXT_PUBLIC_` prefix and never ship one in a client bundle.
 
-Without Whitechain settings, everything else still works. Whitechain endpoints then answer `501`, and the UI offers acoustic groups instead of vaults.
+Without Whitechain settings, sign-up and login still work. Whitechain endpoints then answer `501`, and the dashboard says that vaults are not configured.
 
 ## 3a. Next.js (App Router)
 
@@ -154,7 +154,7 @@ Alternatively, import the worker yourself and pass the same `workerFactory` to `
 | Colours and fonts | The `<TijoriProvider theme>` prop:<pre>{ accent, ink, muted, line, background, font, fontDisplay }</pre>You can also set `--tj-*` CSS variables. Styles live in `@layer tijori` with `tj-` classes, so your unlayered CSS wins. |
 | Your own layout | Compose the parts yourself:<ul><li>`TijoriAuth`, `ObjectSignUp`, `ObjectSignIn`</li><li>`VaultList`, `CreateVault`, `CreateAcousticGroup`</li><li>`VaultTreasury`, `AttendanceCheck`/`ProximityCheck`</li><li>`InvoiceReceipt`</li></ul>Read state with `useTijori()`, `useIdentity()` and `useVaults()`. |
 | Extra UI in the drop-in app | `<TijoriApp>` slots: `authAlternative`, `renderVault`, `dashboardExtras`, `vaultExtras`, `footer` |
-| Real ultrasonic presence for payouts | Wire the room code through the provider:<ul><li>`<TijoriProvider onPresenceEmit>` broadcasts the code on the initiator's device.</li><li>`presence.listen(challengeId)` resolves with the code heard on approvers' devices.</li></ul> |
+| Your own audio for the payment check | Built in by default (`useAcoustic()` on the ggwave modem). To use another stack:<ul><li>`<TijoriProvider onPresenceEmit>` receives the code to play on the initiator's device.</li><li>`presence.listen(challengeId)` resolves with the code heard on members' devices.</li></ul> |
 | Replace verification providers | `createTijoriServer({ providers: { objectMatching, presence, physicalApproval, externalVault } })` (interfaces in `@tijori/core/integrations`) |
 | React to activity | `createTijoriServer({ onEvent })` receives `vault.created`, `proposal.executed` and `invoice.paid` |
 | Custom persistence | Pass a `StorageAdapter` (`{ mode, transact(work) }`) as `storage`. Writers must be serialised. |

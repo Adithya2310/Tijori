@@ -15,4 +15,5 @@ export * from './whitechain/safe-tx.ts';
 export * from './whitechain/domain.ts';
 export * from './net.ts';
 export * from './random.ts';
+export * from './acoustic-code.ts';
 export * from './legacy.ts';

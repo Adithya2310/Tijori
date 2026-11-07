@@ -5,6 +5,7 @@ import { matchObjectProfile } from '@tijori/core/object-match';
 import { validObjectProfileV2, validObjectQuery } from '@tijori/core/object-profile';
 import { LEGACY_DINO_OBJECT_NAME } from '@tijori/core/legacy';
 import { VaultError } from '@tijori/core/vault';
+import { newAcousticCode } from '@tijori/core/acoustic-code';
 import { registerDefaults, type TijoriProviders } from './context.ts';
 
 // Throttle wrong-object attempts per identity (in memory, per server process): 8 failures per 2 minutes.
@@ -51,19 +52,32 @@ export const providers: IntegrationProviders = {
  },
 };
 
+const freshMatch = (context: Parameters<PresenceSessionProvider['verify']>[0], evidence: Parameters<PresenceSessionProvider['verify']>[1]) => {
+ const fresh = Date.parse(context.challenge.expiresAt) > Date.now();
+ const matches = !!evidence && evidence.challengeId === context.challenge.challengeId && evidence.reference.length === context.challenge.code.length && timingSafeEqual(Buffer.from(evidence.reference), Buffer.from(context.challenge.code));
+ return fresh && matches;
+};
+
 /**
- * Simulated co-presence: the code is created server-side and, in simulated mode only, shown to
- * approvers by the API so the flow can be demonstrated without audio. Replace with the ultrasonic
- * provider (emit `code` on the initiator device, decode it on approvers' devices).
+ * Acoustic co-presence (the default): the server creates a 6-character code that only the initiator receives. The
+ * initiator's device plays it with the acoustic modem (ggwave), and each member's device must hear it and send it
+ * back with their approval. The code never appears in session listings. It proves only that a device heard the
+ * code during the session: a code can be replayed or relayed, so this is not proof of identity or of distance.
  */
 export const presenceProvider: PresenceSessionProvider = {
+ id: 'ggwave-acoustic', mode: 'live',
+ async createChallenge({ expiresAt }) { return { challengeId: randomUUID(), code: newAcousticCode(), expiresAt }; },
+ async verify(context, evidence) { return { accepted: freshMatch(context, evidence), mode: 'live', provider: this.id }; },
+};
+
+/**
+ * Simulated co-presence, for testing without audio: session listings show the code to every member, so the check
+ * proves nothing. Opt in with createTijoriServer({ providers: { presence: simulatedPresenceProvider } }).
+ */
+export const simulatedPresenceProvider: PresenceSessionProvider = {
  id: 'demo-ultrasonic', mode: 'simulated',
  async createChallenge({ expiresAt }) { return { challengeId: randomUUID(), code: randomBytes(4).toString('hex'), expiresAt }; },
- async verify(context, evidence) {
-  const fresh = Date.parse(context.challenge.expiresAt) > Date.now();
-  const matches = !!evidence && evidence.challengeId === context.challenge.challengeId && evidence.reference.length === context.challenge.code.length && timingSafeEqual(Buffer.from(evidence.reference), Buffer.from(context.challenge.code));
-  return { accepted: fresh && matches, mode: 'simulated', provider: this.id };
- },
+ async verify(context, evidence) { return { accepted: freshMatch(context, evidence), mode: 'simulated', provider: this.id }; },
 };
 
 /** The default provider set. Override any of them with createTijoriServer({ providers: { ... } }). */

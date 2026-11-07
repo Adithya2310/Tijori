@@ -15,6 +15,7 @@ import { whitechainSepolia } from 'viem/chains';
 import { rpcFixture } from './rpc-fixture.mjs';
 import { erc20Abi, inboxKeyMessage, packSignatures, safeAbi, safeTxTypedData } from '@tijori/core/whitechain/safe-tx';
 import { verifyWebhook } from '@tijori/invoices';
+import { OBJECT_IDENTITY_NAME, packObjectProfileV2 } from '@tijori/core/object-profile';
 
 if (spawnSync('anvil', ['--version']).error) { console.log('Skipped Whitechain flow: Foundry anvil is not installed.'); process.exit(0); }
 const USDT = '0xcedfB56113143d55b2358b8CFbB0dEB5Ad2f55a7';
@@ -54,22 +55,31 @@ try {
  for (let i = 0; i < 150; i++) { try { if ((await call('capabilities')).status === 200) break; } catch {} await new Promise(r => setTimeout(r, 100)); }
  assert.equal((await call('capabilities')).data.whitechain.configured, true);
 
- // Three enrolled identities; the test holds their keys to sign like their browsers would.
+ // Three enrolled identities; the test holds their keys to sign like their browsers would. Two are scanner v2 object
+ // identities (their object was proven at login, which released the key); one is an older description identity.
  const keyEnvelope = { version: 1, salt: 'aa'.repeat(16), iv: 'bb'.repeat(12), ciphertext: 'cc'.repeat(48) };
+ const axis = i => Array.from({ length: 384 }, (_, j) => (j === i ? 1 : 0));
  const people = [];
  for (let i = 0; i < 3; i++) {
-  const account = privateKeyToAccount(generatePrivateKey());
-  const r = await call('identities', { name: `Signer ${i}`, address: account.address.toLowerCase(), keyEnvelope, objectName: `Object ${i}` });
-  assert.equal(r.status, 200); people.push({ id: r.data.identityId, account, object: `Object ${i}` });
+  const account = privateKeyToAccount(generatePrivateKey()), v2 = i < 2;
+  const identity = v2 ? { objectName: OBJECT_IDENTITY_NAME, objectProfile: packObjectProfileV2([{ cls: axis(i * 2), fg: axis(i * 2 + 1) }]) } : { objectName: `Object ${i}` };
+  const r = await call('identities', { name: `Signer ${i}`, address: account.address.toLowerCase(), keyEnvelope, ...identity });
+  assert.equal(r.status, 200, JSON.stringify(r.data)); people.push({ id: r.data.identityId, account, object: identity.objectName });
  }
  const relayerNonce = () => reader.getTransactionCount({ address: relayer });
 
- // Gasless guarded vault, idempotent per operation ID.
+ // Every member must be a registered identity: an unknown address could never approve a unanimous payout.
+ const unknownMember = await call('vaults/whitechain', { name: 'Strangers', creatorId: people[0].id, addresses: [privateKeyToAccount(generatePrivateKey()).address] }, { 'Idempotency-Key': 'create-strangers' });
+ assert.equal(unknownMember.status, 400); assert.match(unknownMember.data.error, /Tijori identity/);
+ assert.equal(await relayerNonce(), 0, 'nothing was deployed');
+
+ // Gasless guarded vault, idempotent per operation ID. Every owner must approve each payout.
  const create = { name: 'Builders DAO', creatorId: people[0].id, addresses: [people[1].account.address, people[2].account.address] };
  let r = await call('vaults/whitechain', create, { 'Idempotency-Key': 'create-dao' });
  assert.equal(r.status, 200, JSON.stringify(r.data)); const vaultId = r.data.vaultId;
  const vault = r.data.groups.find(g => g.id === vaultId);
- assert.equal(vault.safe.chainId, 1874); assert.equal(getAddress(vault.safe.guard), getAddress(guard)); assert.equal(vault.requiredApprovals, 2);
+ assert.equal(vault.safe.chainId, 1874); assert.equal(getAddress(vault.safe.guard), getAddress(guard)); assert.equal(vault.requiredApprovals, 3);
+ assert.equal(vault.safe.threshold, 3, 'the Safe itself needs all three owners');
  const safe = vault.safe.address;
  const nonceAfterDeploy = await relayerNonce();
  assert.equal((await call('vaults/whitechain', create, { 'Idempotency-Key': 'create-dao' })).status, 200);
@@ -93,31 +103,38 @@ try {
  assert.equal((await call('invoices', invoiceBody, auth)).data.created, false);
  assert.equal((await call('invoices', invoiceBody, { Authorization: 'Bearer tinbox_bad' })).status, 401);
 
- // Proposal and a co-present approval session.
+ // Proposal and an acoustic payment check.
  r = await call('proposals', { vaultId, proposerId: people[1].id, invoiceId }, { 'Idempotency-Key': 'pay-inv-1' });
  assert.equal(r.status, 200, JSON.stringify(r.data)); const proposalId = r.data.proposalId;
  r = await call('approval-sessions', { proposalId, initiatorId: people[0].id });
  assert.equal(r.status, 200, JSON.stringify(r.data)); const { session, emit } = r.data;
+ assert.match(emit.code, /^[A-Z0-9]{6}$/, 'a code the acoustic modem can play');
  const listed = (await call(`treasury/sessions?identityId=${people[1].id}`)).data.sessions.find(s => s.id === session.id);
- assert.equal(listed.presence.simulatedCode, emit.code); assert.equal(listed.proposal.amount, '250');
+ assert.equal(listed.presence.mode, 'live'); assert.equal(listed.presence.simulatedCode, undefined); assert.equal(listed.proposal.amount, '250');
+ assert.ok(!JSON.stringify((await call(`treasury/sessions?identityId=${people[1].id}`)).data).includes(emit.code), 'members only learn the code by hearing it');
  const typed = s => safeTxTypedData(1874, s.safe, { ...s.safeTx, value: BigInt(s.safeTx.value), safeTxGas: BigInt(s.safeTx.safeTxGas), baseGas: BigInt(s.safeTx.baseGas), gasPrice: BigInt(s.safeTx.gasPrice), nonce: BigInt(s.safeTx.nonce) });
  const approve = async (person, s, overrides = {}) => call('physical-approvals', { sessionId: s.id, walletId: person.id, objectName: person.object, evidence: { reference: emit.code, challengeId: s.presence.challengeId }, signature: await person.account.signTypedData(typed(s)), ...overrides });
 
  const arkivBefore = rpc.control.sends, chainBefore = await relayerNonce();
- assert.equal((await approve(people[1], session, { objectName: 'wrong object' })).status, 400, 'object must match');
- assert.equal((await approve(people[1], session, { evidence: { reference: '00000000', challengeId: session.presence.challengeId } })).status, 400, 'presence code must match');
+ const wrongCode = emit.code.replace(/^./, c => (c === 'A' ? 'B' : 'A'));
+ assert.equal((await approve(people[2], session, { objectName: 'wrong object' })).status, 400, 'an older identity still checks its object');
+ assert.equal((await approve(people[1], session, { evidence: { reference: wrongCode, challengeId: session.presence.challengeId } })).status, 400, 'the heard code must match');
  assert.equal((await approve(people[1], session, { signature: await people[2].account.signTypedData(typed(session)) })).status, 400, 'signature must be the approver key');
  assert.equal(rpc.control.sends, arkivBefore); assert.equal(await relayerNonce(), chainBefore, 'rejections cost nothing');
  r = await approve(people[0], session); assert.equal(r.status, 200, JSON.stringify(r.data)); assert.equal(r.data.session.status, 'open');
  assert.equal((await approve(people[0], session)).status, 400, 'no double approval');
 
- // Valid owner signatures without a presence attestation cannot move funds (e.g. via the Safe app).
+ // Even every owner's signature, without the verifier's attestation, cannot move funds (e.g. via the Safe app).
  const t = typed(session).message;
- const bypass = packSignatures(await Promise.all([people[0], people[1]].map(async p => ({ signer: p.account.address, signature: await p.account.signTypedData(typed(session)) }))));
+ const bypass = packSignatures(await Promise.all(people.map(async p => ({ signer: p.account.address, signature: await p.account.signTypedData(typed(session)) }))));
  await assert.rejects(admin.writeContract({ address: safe, abi: safeAbi, functionName: 'execTransaction', args: [t.to, t.value, t.data, t.operation, t.safeTxGas, t.baseGas, t.gasPrice, t.gasToken, t.refundReceiver, bypass] }));
 
- // Second co-present approval reaches the majority: attested, relayed, paid.
+ // A majority is no longer enough: the second member's device heard the code, but the third has not.
  r = await approve(people[1], session); assert.equal(r.status, 200, JSON.stringify(r.data));
+ assert.equal(r.data.session.status, 'open', '2 of 3 members do not pay');
+ assert.equal(await relayerNonce(), chainBefore, 'nothing was sent before every member joined');
+ // The third member joins: attested, relayed, paid.
+ r = await approve(people[2], session); assert.equal(r.status, 200, JSON.stringify(r.data));
  assert.equal(r.data.session.status, 'executed', JSON.stringify(r.data.session));
  assert.equal(await reader.readContract({ address: USDT, abi: erc20Abi, functionName: 'balanceOf', args: [vendor] }), 250_000_000n);
  const refund = await reader.readContract({ address: USDT, abi: erc20Abi, functionName: 'balanceOf', args: [relayer] });
@@ -148,7 +165,7 @@ try {
  const gas = (await call('relayer')).data;
  assert.equal(gas.configured, true); assert.equal(gas.sponsoredTransactions, 2); assert.ok(Number(gas.refundsReceivedUsdt) > 0);
  assert.ok(!JSON.stringify(gas).includes(relayerKey.slice(2)) && !JSON.stringify(await call(`treasury/sessions?identityId=${people[0].id}`)).includes(verifierKey.slice(2)));
- console.log('Passed Whitechain flow: gasless guarded vault, vendor invoice, object + presence + key checks per approval, guard blocks un-attested execution, co-present majority pays in USDT with USDT gas refund, signed webhook, CSV export, sessions never combine.');
+ console.log('Passed Whitechain flow: registered members only, gasless guarded all-member vault, vendor invoice, acoustic code (never listed) + own key per approval, older identities still check their object, guard blocks un-attested execution, every member together pays in USDT with USDT gas refund, signed webhook, CSV export, sessions never combine.');
 } finally {
  if (server && server.exitCode === null) { server.kill('SIGTERM'); await new Promise(r => server.once('exit', r)); }
  anvil.kill('SIGTERM');
