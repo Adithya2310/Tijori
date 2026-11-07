@@ -15,12 +15,14 @@ The Tijori app in this repository uses the published [`@tijori/*` npm packages](
 |---|---|
 | [`lib/tijori.ts`](lib/tijori.ts) | `export const tijori = createTijoriServer({ ...fromEnv(), basePath: '/api' })` |
 | [`app/api/[...path]/route.ts`](app/api/%5B...path%5D/route.ts) | `export const { GET, POST, HEAD } = toNextHandlers(tijori)` |
-| [`app/page.tsx`](app/page.tsx) | `<TijoriProvider baseUrl="/api/v1"><TijoriApp … /></TijoriProvider>` |
+| [`app/(tijori)/layout.tsx`](app/(tijori)/layout.tsx) + [`TijoriShell`](app/components/TijoriShell.tsx) | `<TijoriProvider baseUrl="/api/v1"><TijoriApp … /></TijoriProvider>` for `/signup`, `/login` and `/app` |
 | [`app/layout.tsx`](app/layout.tsx) | `import '@tijori/react/styles.css'` |
 | `package.json` | `"prebuild": "tijori-client prepare-assets public/tijori-assets"` |
 
-Everything else is app-specific and plugs into `<TijoriApp/>` slots:
-- [`PhoneAccess`](app/components/PhoneAccess.tsx): LAN phone testing.
+Everything else is app-specific:
+- The landing page at `/` ([`app/page.tsx`](app/page.tsx), `app/landing.css`, `LandingMotion`, `Brand`): illustrations only, never live state. Its buttons open `/signup` and `/login`; the signed-in app is at `/app`.
+- [`AuthAtmosphere`](app/components/AuthAtmosphere.tsx): the decorative pale-blue WebGL background (`ogl`, adapted from React Bits MicroSlats; see app/components/MicroSlats.LICENSE.md), passed to `<TijoriApp authBackdrop>`. Nothing depends on WebGL.
+- [`PhoneAccess`](app/components/PhoneAccess.tsx): LAN phone testing, in the `dashboardExtras` slot.
 - The Anon RPC diagnostic route (`/diagnostics/anon-rpc`, not linked from the app).
 
 The app shows one flow: object sign-up/login → a Whitechain vault with registered members → payouts that run once every member's device hears the payment code. Older passphrase identities, Base Sepolia Safes and standalone acoustic groups are no longer shown; their stored records stay readable through the API.

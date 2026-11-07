@@ -1,14 +1,45 @@
-/* Reference-app styles. Tijori UI styles come from @tijori/react/styles.css (imported in layout.tsx). */
-html,body{margin:0;background:#080c14;color:#eef3ff;color-scheme:dark}
-body{font-family:'DM Sans',sans-serif;font-size:14px}
+/* App styles. The Tijori UI (sign-in journey, vaults, payment check) comes from @tijori/react/styles.css;
+ * this file holds page basics, the landing page tokens and app-only pieces (brand link, background, phone access). */
+:root {
+  --bg-canvas-light: #f4f7fb;
+  --surface-primary-gradient: linear-gradient(180deg, #3882f6 0%, #5b9bf8 55%, #76a9fa 100%);
+  --surface-glass-secondary: rgb(255 255 255 / 14%);
+  --surface-glass-border: rgb(255 255 255 / 28%);
+  --surface-solid-action: #fff;
+  --accent-brand-pill: #ff6b4a;
+  --divider-dashed: rgb(255 255 255 / 30%);
+  --ink: #192b46;
+  --muted: #5c6e87;
+  --line: #dce5f0;
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-in-out: cubic-bezier(.77, 0, .175, 1);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; overscroll-behavior: none; }
+html, body { margin: 0; background: var(--bg-canvas-light); color: var(--ink); }
+body { font: 400 14px/1.5 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; }
 
-/* LAN phone testing panel (app-only) */
-.tj-phone-access{display:flex;align-items:center;gap:28px;padding:22px;margin:24px 0;background:#111e33;border:1px solid #263e62;border-radius:12px;text-align:left}
-.tj-phone-access-body{flex:1;min-width:0}.tj-phone-access .tj-section-kicker{display:flex;align-items:center;gap:7px;color:#91b6ff}
-.tj-phone-access h3{font-size:17px;margin:10px 0}.tj-phone-access p,.tj-phone-access ol{font-size:12px;color:#a3b8d8;line-height:1.7;margin:8px 0}
-.tj-phone-access ol{padding-left:20px}.tj-phone-access a{color:#bdd2ff;overflow-wrap:anywhere}.tj-phone-access code{color:#dce8ff}
-.tj-phone-network{display:flex;align-items:center;gap:10px;font-size:12px;color:#a3b8d8}.tj-phone-network select{max-width:100%;background:#0b1423;border:1px solid #304c77;border-radius:6px;padding:8px;color:#dce8ff}
-.tj-phone-link{display:flex;align-items:center;gap:12px}.tj-phone-link button{border:1px solid #304c77;border-radius:6px;background:#1a3156;color:#bdd2ff;padding:8px;display:grid;place-items:center}
-.tj-phone-qr{flex-shrink:0;text-align:center}.tj-phone-qr svg{display:block;border-radius:6px}.tj-phone-qr small{display:block;font-size:10px;color:#a3b8d8;margin-top:9px}
-.tj-auth-shell>.tj-phone-access{width:min(1040px,100%);margin:0 auto 16px}
+/* Blue paper: dyed gradient, soft crease lighting and faint fibres. */
+.paper-surface { position: relative; isolation: isolate; overflow: hidden; background: var(--surface-primary-gradient); color: #fff; border: 1px solid #ffffff70; box-shadow: inset 0 1px #ffffff55, 0 16px 40px #3165ad18; }
+.paper-surface::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(ellipse at 15% 25%, #ffffff55, transparent 45%), radial-gradient(ellipse at 85% 65%, #ffffff38, transparent 50%), linear-gradient(125deg, transparent 40%, #ffffff22 48%, #103b6414 52%, transparent 60%); mix-blend-mode: soft-light; }
+.paper-surface::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .045; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='paper-grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath fill='%23000' filter='url(%23paper-grain)' d='M0 0h160v160H0z'/%3E%3C/svg%3E"); }
+
+/* Brand link on the landing page. */
+.tijori-brand { display: inline-flex; align-items: center; gap: 11px; color: var(--ink); font-size: 24px; font-weight: 600; letter-spacing: -.9px; text-decoration: none; flex-shrink: 0; }
+.brand-mark { width: 38px; height: 42px; display: grid; place-items: center; position: relative; border: 1px solid #fff9; border-radius: 11px 15px 11px 11px; background: linear-gradient(145deg, #fff, #dbe8fd); color: #3879dd; box-shadow: 0 5px 12px #265eab1c; transform: rotate(-6deg); }
+.brand-mark::after { content: ''; position: absolute; right: 0; top: 0; width: 10px; height: 10px; background: #bfd6fb; border-radius: 0 12px 0 4px; box-shadow: -1px 2px 2px #285f9f1a; }
+
+/* Decorative WebGL background on the landing hero. */
+.auth-ambient { position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .28; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .auth-ambient { opacity: .18; } }
+
+/* LAN phone testing panel (app-only, on the dashboard). */
+.tj-phone-access{display:flex;align-items:center;gap:28px;padding:22px;margin:24px 0;background:#fff;border:1px solid var(--line);border-radius:22px;text-align:left}
+.tj-phone-access-body{flex:1;min-width:0}.tj-phone-access .tj-section-kicker{display:flex;align-items:center;gap:7px;color:var(--muted)}
+.tj-phone-access h3{font-size:19px;font-weight:500;letter-spacing:-.03em;margin:10px 0}.tj-phone-access p,.tj-phone-access ol{font-size:12px;color:var(--muted);line-height:1.7;margin:8px 0}
+.tj-phone-access ol{padding-left:20px}.tj-phone-access a{color:#255fc0;overflow-wrap:anywhere}.tj-phone-access code{color:var(--ink)}
+.tj-phone-network{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}.tj-phone-network select{max-width:100%;background:#f9fbff;border:1px solid #d0ddec;border-radius:12px;padding:8px;color:var(--ink)}
+.tj-phone-link{display:flex;align-items:center;gap:12px}.tj-phone-link button{border:1px solid var(--line);border-radius:999px;background:#fff;color:#285caa;padding:8px;display:grid;place-items:center}
+.tj-phone-qr{flex-shrink:0;text-align:center}.tj-phone-qr svg{display:block;border-radius:12px}.tj-phone-qr small{display:block;font-size:10px;color:var(--muted);margin-top:9px}
 @media(max-width:600px){.tj-phone-access{flex-direction:column;align-items:stretch;padding:18px;gap:16px}.tj-phone-qr{align-self:center}.tj-phone-network{flex-direction:column;align-items:start}}
