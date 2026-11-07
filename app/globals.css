@@ -29,6 +29,10 @@ body { font: 400 14px/1.5 'DM Sans', -apple-system, BlinkMacSystemFont, sans-ser
 .tijori-brand { display: inline-flex; align-items: center; gap: 11px; color: var(--ink); font-size: 24px; font-weight: 600; letter-spacing: -.9px; text-decoration: none; flex-shrink: 0; }
 .brand-mark { width: 38px; height: 42px; display: grid; place-items: center; position: relative; border: 1px solid #fff9; border-radius: 11px 15px 11px 11px; background: linear-gradient(145deg, #fff, #dbe8fd); color: #3879dd; box-shadow: 0 5px 12px #265eab1c; transform: rotate(-6deg); }
 .brand-mark::after { content: ''; position: absolute; right: 0; top: 0; width: 10px; height: 10px; background: #bfd6fb; border-radius: 0 12px 0 4px; box-shadow: -1px 2px 2px #285f9f1a; }
+/* Use the same approved mark for the landing page and the published SDK UI. */
+.brand-mark, .tj-root .tj-brand-mark { width: 38px; height: 38px; border: 0; border-radius: 0; background: url('/tijori-mark.svg') center / contain no-repeat; box-shadow: none; transform: none; }
+.brand-mark::after, .tj-root .tj-brand-mark::after { content: none; }
+.brand-mark > svg, .tj-root .tj-brand-mark > svg { display: none; }
 
 /* Decorative WebGL background on the landing hero. */
 .auth-ambient { position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .28; overflow: hidden; }
