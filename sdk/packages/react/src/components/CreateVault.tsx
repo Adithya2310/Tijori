@@ -55,18 +55,18 @@ export function CreateVault({ onCreated, name: brand = 'Tijori' }: { onCreated?:
    {peers.map(peer => <button type="button" className="tj-peer-option" disabled={busy} aria-pressed={has(peer.address!)} key={peer.id} onClick={() => (has(peer.address!) ? remove(peer.address!) : add(peer.address!))}><span><strong>{peer.name}</strong><small>{peer.address}</small></span><span>{has(peer.address!) ? 'Added ✓' : '+ Add'}</span></button>)}
    {!peers.length && <p className="tj-form-hint">Waiting for another person to sign up on their device…</p>}</div>
   {members.length > 0 && <p className="tj-form-hint">Members: you, {members.map(nameOf).join(', ')}.</p>}
-  <div className="tj-signal-banner"><Radio size={20} /><div><strong>Whitechain Sepolia · all {members.length + 1} members must be together to pay</strong><small>The presence guard on the Safe accepts a payout only with every member&apos;s signature and the payment check.</small></div></div>
+  <div className="tj-signal-banner"><Radio size={20} /><div><strong>Whitechain Sepolia · {members.length ? `all ${members.length + 1} members must be together to pay` : 'every member must be together to pay'}</strong><small>The presence guard on the Safe accepts a payout only with every member&apos;s signature and the payment check.</small></div></div>
   <button className="tj-submit" disabled={busy || !name.trim() || !members.length} onClick={() => void create()}>Create vault <ArrowRight size={17} /></button></>;
 }
 
 /** Create a group for acoustic attendance checks only (no Safe), from enrolled peers or pasted addresses. */
 export function CreateAcousticGroup({ onCreated }: { onCreated?: () => void }) {
- const { data, identityId, busy, mutate, localStorageMode } = useTijori();
+ const { data, identityId, busy, mutate } = useTijori();
  const [name, setName] = useState('');
  const { members, has, add, entry, chips } = useMembers();
  const peers = (data.peers || []).filter(peer => peer.id !== identityId);
  return <><div className="tj-modal-icon"><Radio /></div><div className="tj-section-kicker">GET TOGETHER</div><h2>Create an acoustic group</h2>
-  <p className="tj-modal-desc">{localStorageMode ? 'Choose another enrolled user below. This group is saved on the laptop; it does not deploy a Safe.' : 'Choose another enrolled user below. This group is saved in Arkiv without deploying a Safe.'}</p>
+  <p className="tj-modal-desc">Choose another enrolled user below. This group does not deploy a Safe.</p>
   <label>Group name<input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Acoustic test group" /></label>
   <div className="tj-discovered-peers"><strong>Registered people</strong><p className="tj-form-hint">New users appear automatically. Each device needs its own identity.</p>
    {peers.map(peer => <button type="button" className="tj-peer-option" disabled={busy || (!!peer.address && has(peer.address))} key={peer.id} onClick={() => peer.address && add(peer.address)}><span><strong>{peer.name}</strong><small>{peer.address}</small></span><span>{peer.address && has(peer.address) ? 'Added' : '+ Add'}</span></button>)}

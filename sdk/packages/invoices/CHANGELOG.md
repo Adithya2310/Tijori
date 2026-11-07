@@ -11,6 +11,7 @@
   - Sign-up is a username plus a one-tap scan (3 angles, object at the centre, no tapping or dragging).
   - Login is the username plus one photo.
   - The server matches the photo's descriptor against the enrolled object and releases the key envelope only on a match. A different object (a pen for a bottle) is refused, and repeated wrong objects are throttled.
+  - **A new look.** Tactile atmospheric blue paper: light canvas, blue paper cards, white forms, pill buttons and the Tijori treasure-chest mark. Sign-up and login are a guided journey (username → object → review) with progress and short transitions; `TijoriApp` adds `authMode`, `authBackdrop` and `homeHref`.
   - **One payout flow: every member together.** A vault is created from registered people, and every payout runs only after a payment check: the initiator's device plays a 6-character code (audible or ultrasound, ggwave), every member's device hears it and each member's own key signs. No extra photo: the key was unlocked by the object login.
 
   What changes underneath:

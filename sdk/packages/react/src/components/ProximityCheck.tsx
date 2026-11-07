@@ -10,9 +10,9 @@ type Group = {id:string;name:string;members:{id:string;name:string}[]};
 type Session = ProximitySessionView;
 type Modem = AcousticModem;
 /** Acoustic proof of attendance for a vault or group: broadcast a two-minute challenge or join one by microphone. */
-export default function ProximityCheck({group,walletId,storageMode:storageModeProp}:{group:Group;walletId:string;storageMode?:string}) {
- const { client, data } = useTijori();
- const proximity = client.proximity, storageMode = storageModeProp ?? data.storageMode;
+export default function ProximityCheck({group,walletId}:{group:Group;walletId:string;storageMode?:string}) {
+ const { client } = useTijori();
+ const proximity = client.proximity;
  const headingId=useId();
  const audioHintId=useId();
  const [ultrasound,setUltrasound]=useState(false);
@@ -113,7 +113,7 @@ export default function ProximityCheck({group,walletId,storageMode:storageModePr
    <p className="tj-check-status">{session?.hostId===walletId?`Broadcast mode: ${ultrasound?'Ultrasound · about 15–19.5 kHz':'Audible'}`:'Receive mode: automatic · audible + ultrasound'}</p>
    <div className="tj-dial-wrap"><div className="tj-dial"><div className="tj-dial-inner"><AudioLines size={27}/><strong className="tj-dial-listening">{ownMatch?'Signal matched':ended?'Check ended':mode==='starting'?'Starting…':mode==='permission'?'Allow microphone':mode==='broadcasting'?'Broadcasting':mode==='listening'?'Listening':'Ready'}</strong><small>{active?`${seconds}s remaining`:'ACOUSTIC CHECK'}</small></div></div></div>
    {mode==='listening'&&!ended&&<label>Microphone level<meter min="0" max="100" value={level} aria-label="Microphone level"/></label>}
-   <div className="tj-signal-banner"><Radio size={20}/><div><strong>Acoustic matching only · No transfers</strong><small>Audio stays on your device. Decoded challenges and matches are stored in {storageMode==='local'?'the laptop’s encrypted local database. No Arkiv writes are made.':'encrypted Arkiv state. Public storage metadata remains visible.'} A match can be replayed or relayed and does not guarantee physical proximity or verify identity.</small></div></div>
+   <div className="tj-signal-banner"><Radio size={20}/><div><strong>Acoustic matching only · No transfers</strong><small>Audio stays on your device. Decoded challenges and matches are stored in encrypted server storage. A match can be replayed or relayed and does not guarantee physical proximity or verify identity.</small></div></div>
    <ul className="tj-check-members">{group.members.map(m=><li key={m.id}><span>{m.name}</span><span>{session?.hostId===m.id?'Broadcaster':session?.matches.some(v=>v.walletId===m.id)?'Signal matched':'Waiting to join'}</span></li>)}</ul>
    {ownMatch&&<p className="tj-form-hint">Matched at {new Date(ownMatch.verifiedAt).toLocaleTimeString()}. Recorded for this check only.</p>}
    {(error||connectionError)&&<div className="tj-error" role="alert">{error||connectionError}</div>}

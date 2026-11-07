@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowLeft, CheckCircle2, LockKeyhole, LogOut, Plus, ShieldCheck, Users, Wallet, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, LogOut, Plus, ShieldCheck, Users, Wallet, X } from 'lucide-react';
 import type { ApiVault } from '@tijori/client';
 import { useTijori } from '../context.tsx';
 import { TijoriAuth, type AuthAlternative } from './TijoriAuth.tsx';
+import { BrandMark } from './Brand.tsx';
 import { VaultList } from './VaultList.tsx';
 import { CreateAcousticGroup, CreateVault } from './CreateVault.tsx';
 import { Modal } from './Modal.tsx';
@@ -29,6 +30,12 @@ export type TijoriAppProps = {
  /** The dashboard's create action. Default 'vault'. 'acoustic-group' restores the older standalone acoustic groups. */
  createMode?: 'vault' | 'acoustic-group';
  loading?: ReactNode;
+ /** Open the signed-out screen straight into sign-up or log-in (e.g. on /signup and /login). Default: a welcome choice. */
+ authMode?: 'signup' | 'login';
+ /** Decorative layer behind the sign-in card (e.g. an animated background). */
+ authBackdrop?: ReactNode;
+ /** Where the brand mark links (e.g. a landing page). */
+ homeHref?: string;
 };
 
 /** Members of a group without a Whitechain treasury. */
@@ -39,9 +46,9 @@ export function GroupMembers({ vault }: { vault: ApiVault }) {
 
 /** Acoustic proof of attendance for one vault, with the standard explanation. */
 export function AttendanceCheck({ vault }: { vault: ApiVault }) {
- const { identityId, localStorageMode, data } = useTijori();
+ const { identityId, data } = useTijori();
  return <section className="tj-acoustic-section"><div className="tj-section-heading"><div><div className="tj-section-kicker">GET TOGETHER</div><h2>Acoustic proximity check</h2></div></div>
-  <p className="tj-form-hint">Send broadcasts a two-minute challenge. Other enrolled vault members join from their devices. Matches are saved in {localStorageMode ? 'the laptop’s encrypted local database' : 'encrypted Arkiv state'} and never authorize a transfer.</p>
+  <p className="tj-form-hint">Send broadcasts a two-minute challenge. Other enrolled vault members join from their devices. Matches are saved in encrypted server storage and never authorize a transfer.</p>
   <ProximityCheck key={`${vault.id}:${identityId}`} group={vault} walletId={identityId} storageMode={data.storageMode} /></section>;
 }
 
@@ -49,7 +56,7 @@ export function AttendanceCheck({ vault }: { vault: ApiVault }) {
  * The complete Tijori experience: object sign-in, then Whitechain vaults whose payouts run once every member is
  * together (their devices hear a payment code and their own keys sign).
  */
-export function TijoriApp({ name = 'Tijori', authAlternative, authFooter, renderVault, dashboardExtras, vaultExtras, footer, createMode, loading }: TijoriAppProps) {
+export function TijoriApp({ name = 'Tijori', authAlternative, authFooter, renderVault, dashboardExtras, vaultExtras, footer, createMode, loading, authMode, authBackdrop, homeHref }: TijoriAppProps) {
  const { client, loaded, identity, data, localStorageMode, notice, error, setNotice, setError, refresh, busy, pausePolling, signOut } = useTijori();
  const [vaultId, setVaultId] = useState(''), [modal, setModal] = useState<'vault' | 'acoustic-group' | null>(null), [whitechainReady, setWhitechainReady] = useState<boolean | null>(null);
  useEffect(() => {
@@ -60,7 +67,7 @@ export function TijoriApp({ name = 'Tijori', authAlternative, authFooter, render
  // The vault view polls its own sessions; background state polling resumes on the dashboard.
  useEffect(() => (vaultId ? pausePolling() : undefined), [vaultId, pausePolling]);
  if (!loaded) return <>{loading ?? <div className="tj-loading">Loading your vault…</div>}</>;
- if (!identity) return <TijoriAuth name={name} alternative={authAlternative} footer={authFooter} />;
+ if (!identity) return <TijoriAuth name={name} alternative={authAlternative} footer={authFooter} mode={authMode} backdrop={authBackdrop} homeHref={homeHref} />;
  const create = createMode ?? 'vault', legacyGroups = create === 'acoustic-group' || !!renderVault;
  const createLabel = create === 'vault' ? 'Create vault' : 'Create acoustic group';
  const canCreate = create !== 'vault' || whitechainReady !== false;
@@ -70,21 +77,24 @@ export function TijoriApp({ name = 'Tijori', authAlternative, authFooter, render
  const open = (next: 'vault' | 'acoustic-group') => { setError(''); setNotice(''); setModal(next); };
  const close = () => { setModal(null); setError(''); };
  const whitechain = vault?.safe?.chainId === 1874;
+ const vaults = data.groups.filter(g => legacyGroups || g.safe?.chainId === 1874);
+ const waiting = data.proposals.filter(p => p.status === 'pending' && vaults.some(g => g.id === p.group_id)).length;
  const summary = !vault ? '' : whitechain ? (vault.requiredApprovals >= vault.members.length ? `${vault.members.length} members · all must be together to pay` : `${vault.members.length} members · ${vault.requiredApprovals} must be together to pay`)
   : vault.safe ? `${vault.safe.owners.length} signers · ${vault.requiredApprovals} approvals needed` : `${vault.members.length} members · ${vault.requiredApprovals} approvals needed`;
- return <div className="tj-shell"><aside className="tj-sidebar"><div className="tj-brand"><div className="tj-brand-mark"><LockKeyhole size={18} /></div><span>{name}<span className="tj-brand-dot">.</span></span></div>
+ return <div className="tj-shell"><aside className="tj-sidebar"><div className="tj-brand"><BrandMark name={name} href={homeHref} /></div>
   <div className="tj-side-label">WORKSPACE</div><nav><button className="tj-nav tj-active" onClick={showVaults}><Wallet size={18} /><span>My vaults</span></button></nav>
   <div className="tj-side-bottom"><div className="tj-side-card"><div className="tj-side-card-icon"><ShieldCheck size={18} /></div><strong>Better together.</strong><p>Make decisions with your people.</p></div>
    <div className="tj-side-foot"><span className="tj-avatar tj-small">{identity.name[0]?.toUpperCase()}</span><div><strong>{identity.name}</strong><small>{identity.address || 'Legacy identity'}</small></div></div></div></aside>
   <main className="tj-main"><header className="tj-topbar"><div className="tj-crumb"><button onClick={showVaults}>My vaults</button>{vault && <><span>/</span><strong>{vault.name}</strong></>}</div>
-   <div className="tj-top-actions"><span className="tj-demo-pill"><span /> {localStorageMode ? 'LOCAL WI-FI TEST' : 'ARKIV DEMO'}</span><button className="tj-signout" onClick={() => { signOut(); setVaultId(''); }}><LogOut size={16} /> <span>Log out</span></button></div></header>
+   <div className="tj-top-actions"><span className="tj-demo-pill"><span /> {localStorageMode ? 'TESTNET DEMO' : 'ARKIV DEMO'}</span><button className="tj-signout" onClick={() => { signOut(); setVaultId(''); }}><LogOut size={16} /> <span>Log out</span></button></div></header>
    <div className="tj-content"><div className="tj-welcome"><div><div className="tj-eyebrow"><span className="tj-sparkle">✳</span> YOUR SHARED SPACE</div>
     {vault ? <><button className="tj-back-link" onClick={showVaults}><ArrowLeft size={14} /> All vaults</button><h1>{vault.name}</h1><p>{summary}</p></> : <><h1>My vaults</h1><p>All the people and vaults you share decisions with.</p></>}</div>
     {!vault && canCreate && <button className="tj-primary" onClick={() => open(create)}><Plus size={17} /> {createLabel}</button>}</div>
-    {localStorageMode && <div className="tj-notice">Local Wi-Fi test · Identities and vaults are saved only on this laptop (encrypted). Vault deployments and payouts are real Whitechain testnet transactions.</div>}
     {!canCreate && <div className="tj-error">Whitechain vaults are not configured on this server: set the relayer and verifier keys and the guard addresses (see .env.example).</div>}
     {notice && <div className="tj-notice"><CheckCircle2 size={17} />{notice}<button onClick={() => setNotice('')} aria-label="Dismiss"><X size={16} /></button></div>}
     {error && !modal && <div className="tj-error">{error}</div>}
+    {!vaultId && <section className="tj-workspace-card tj-paper-surface" aria-label="Workspace overview"><div className="tj-section-kicker">A SPACE FOR YOUR PEOPLE</div><h2>Better together,<br /><span className="tj-entity-token"><span className="tj-entity-avatar" aria-hidden="true">{identity.name[0]?.toUpperCase()}</span>{identity.name}.</span></h2>
+     <div className="tj-workspace-metrics"><div><strong>{vaults.length}</strong><span>Shared {vaults.length === 1 ? 'vault' : 'vaults'}</span></div><div><strong>{waiting}</strong><span>{waiting === 1 ? 'Payout waiting' : 'Payouts waiting'} for everyone</span></div></div></section>}
     {!vaultId && <VaultList onOpen={showVault} onCreate={canCreate ? () => open(create) : undefined} createLabel={create === 'vault' ? 'Create your first vault' : createLabel} filter={legacyGroups ? undefined : item => item.safe?.chainId === 1874} />}
     {!vault && dashboardExtras}
     {vaultId && !vault && <div className="tj-empty-groups"><p>This vault is unavailable for the current identity.</p><button className="tj-light-btn" onClick={showVaults}>Back to my vaults</button></div>}
