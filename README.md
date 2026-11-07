@@ -23,7 +23,7 @@ Everything else is app-specific:
 - The landing page at `/` ([`app/page.tsx`](app/page.tsx), `app/landing.css`, `LandingMotion`, `Brand`): illustrations only, never live state. Its buttons open `/signup` and `/login`; the signed-in app is at `/app`.
 - [`AuthAtmosphere`](app/components/AuthAtmosphere.tsx): the decorative pale-blue WebGL background (`ogl`, adapted from React Bits MicroSlats; see app/components/MicroSlats.LICENSE.md), passed to `<TijoriApp authBackdrop>`. Nothing depends on WebGL.
 - [`PhoneAccess`](app/components/PhoneAccess.tsx): LAN phone testing, in the `dashboardExtras` slot.
-- The Anon RPC diagnostic route (`/diagnostics/anon-rpc`, not linked from the app).
+- Whitechain vault dashboard reads through Anon RPC / Nym, with status, Refresh and Retry controls. The isolated diagnostic route (`/diagnostics/anon-rpc`) can also read a public vault. See [Anon RPC integration and privacy scope](docs/ANON-RPC.md).
 
 The app shows one flow: object sign-up/login → a Whitechain vault with registered members → payouts that run once every member's device hears the payment code. Older passphrase identities, Base Sepolia Safes and standalone acoustic groups are no longer shown; their stored records stay readable through the API.
 
