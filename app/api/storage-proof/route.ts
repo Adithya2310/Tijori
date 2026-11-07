@@ -1,6 +1,7 @@
 import { withArkiv } from '@tijori/server/storage/arkiv';
 import { storageMode } from '@tijori/server/storage/index';
 import { tijori } from '@/lib/tijori';
+import { verifyStorageReceipt } from '@/lib/storage-proof';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,10 +17,9 @@ export async function GET(request: Request) {
    return withArkiv(async store => {
     const state = await store.read();
     if (!state.entityKey || !state.vault.wallets.some(wallet => wallet.id === identityId && wallet.keyEnvelope)) return { persisted: false, storageMode: 'arkiv' };
-    const evidence = await store.verifyRead();
+    const evidence = await verifyStorageReceipt(store, state.entityKey);
     // Only expose receipt metadata; no ciphertext, identity profiles, keys or signed journal bytes.
-    return { persisted: evidence.persisted, storageMode: 'arkiv', transactionReceiptVerified: 'transactionReceiptVerified' in evidence && evidence.transactionReceiptVerified,
-     transactionHash: 'transactionHash' in evidence ? evidence.transactionHash : undefined,
+    return { persisted: true, storageMode: 'arkiv', ...evidence,
      entityKey: state.entityKey, revision: state.revision.toString() };
    });
   });
