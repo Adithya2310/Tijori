@@ -167,5 +167,27 @@ async function openStore(config: ReturnType<typeof arkivConfig>) {
    await reconcile();
   } catch (e) { if (e instanceof StorageError) throw e; fail(journal.pending ? 'Arkiv write requires reconciliation. Its signed hash is saved locally; do not submit it again.' : 'Arkiv write preparation failed; no transaction was broadcast.'); }
  };
- return { read, write, reader, address: account.address, journal: () => ({ entityKey: journal.entityKey, revision: journal.revision, reservedWei: journal.reservedWei, lastTxHash: journal.lastTxHash, lastFeeWei: journal.lastFeeWei, pendingHash: journal.pending?.hash }) };
+ const verifyRead = async () => {
+  const state = await read(), row = await query();
+  if (!row) return { persisted: false, namespace, chainId: 7794095, reason: 'No entity exists yet. Create a record before verifying persistence.' };
+  let transactionReceiptVerified = false;
+  if (journal.lastTxHash) {
+   const receipt = await reader.getTransactionReceipt({ hash: journal.lastTxHash });
+   const transaction = await reader.getTransaction({ hash: journal.lastTxHash });
+   const eventMatches = receipt.logs.some(log => {
+    if (log.address.toLowerCase() !== registry) return false;
+    try {
+     const event = decodeEventLog({ abi: ENTITY_EVENTS_ABI, data: log.data, topics: log.topics });
+     return (event.eventName === 'EntityCreated' || event.eventName === 'EntityPatched') && event.args.entityKey === row.$key && event.args.owner.toLowerCase() === account.address.toLowerCase();
+    } catch { return false; }
+   });
+   if (receipt.status !== 'success' || !eventMatches || transaction.from.toLowerCase() !== account.address.toLowerCase() || transaction.to?.toLowerCase() !== registry || transaction.chainId !== 7794095) fail('Arkiv receipt does not verify this entity. Inspect the journal.');
+   transactionReceiptVerified = true;
+  }
+  return { persisted: true, chainId: 7794095, namespace, entityKey: row.$key, owner: row.$owner, creator: row.$creator,
+   revision: state.revision.toString(), expiresAtBlock: row.$expiresAt.toString(), ciphertextSha256: digest(row.ciphertext.value),
+   decryptedStateValidated: true, transactionReceiptVerified,
+   ...(journal.lastTxHash ? { transactionHash: journal.lastTxHash, explorerUrl: `https://rabdi.explorer.arkiv.network/tx/${journal.lastTxHash}` } : {}) };
+ };
+ return { read, write, verifyRead, reader, address: account.address, journal: () => ({ entityKey: journal.entityKey, revision: journal.revision, reservedWei: journal.reservedWei, lastTxHash: journal.lastTxHash, lastFeeWei: journal.lastFeeWei, pendingHash: journal.pending?.hash }) };
 }

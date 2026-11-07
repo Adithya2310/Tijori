@@ -39,6 +39,60 @@ A DAO site or marketplace can add object sign-in and gasless Whitechain vaults w
 
 New identities are a username linked to a personal object: the browser computes DINOv2 descriptors of the isolated object, and the server matches the login photo against the enrolled object before releasing any key material (see "Object sign-in" below). It distinguishes different objects but is not secure authentication. The payment check uses real ggwave WASM, browser audio and opt-in microphone access: the initiator's device plays a 6-character code and every member's device must hear it. It shows the devices were within earshot during the check, not who holds them; a code can be replayed or relayed. Whitechain vaults are real testnet Safes whose guard enforces the all-member threshold and the attestation on-chain. Anyone with access to this local app can switch demo identities. Use only testnet funds and synthetic identity information.
 
+## Migrate existing local-file records to Arkiv (finalize branch)
+
+On `finalize`, `lib/tijori.ts` uses the default Arkiv adapter and the isolated `tichori-finalize-v1` namespace.
+New signups write there; existing local records and the original Arkiv namespace are left unchanged.
+The first signup creates the new entity. Run `npm run arkiv:check-finalize` to inspect it without a paid write.
+
+To verify persistence after signup, run `npm run arkiv:proof`. This queries live Rabdi, validates/decrypts
+its returned state, checks it against the durable journal and checks the last transaction receipt's
+registry event against the entity key and owner. It prints only public metadata, a ciphertext hash,
+expiry block and the explorer transaction link. Before the first write it reports `persisted: false`;
+a successful connection or an empty state alone is not evidence of a persisted record. This command
+submits no transaction. Open the reported transaction in the Rabdi explorer for an independent view;
+you can also read the entity by key with the official SDK's `getEntity(entityKey)`. The explorer shows
+encrypted data, not usernames or private records. These RPC/explorer checks are operational evidence,
+not a locally verified consensus/state proof. The existing `arkiv:verify` command instead performs a
+paid rewrite and targets the environment's namespace; it is not the read-only finalize check.
+
+Official references: [read an entity](https://docs.arkiv.network/querying/get-entity/),
+[Rabdi network and explorer](https://docs.arkiv.network/networks/rabdi/).
+
+The optional migration command targets that same finalize namespace. Once new users exist there, it refuses
+to overwrite them. It is not needed when starting with new users only.
+
+The branch adds a source-SDK operator command; install its dependencies with `npm ci --prefix sdk` first.
+Stop every app process using the local dataset before cutover. Keep a private backup of `state.json`,
+`encryption.key`, the Arkiv encryption key and the existing journals. Do not commit those files.
+
+```sh
+npm run arkiv:migrate-local
+npm run arkiv:migrate-local -- --write
+```
+
+The first command is a preview: it validates the existing encrypted local store and prints only counts
+and size, without contacting Arkiv. The second explicitly submits a paid write using the configured
+Arkiv namespace, signer and cumulative fee allowance. `LOCAL_DEMO_DATA_DIR` selects the source
+(default `data/local-demo`). The source is locked through the entire operation, never initialized,
+rewritten or deleted. The destination must be empty: existing entities are never merged or overwritten,
+and journal mismatches or uncertain transactions stop migration. Receipt and exact decrypted readback
+must match before success is reported. Do not retry an uncertain write; reconcile the saved journal.
+
+Migration preserves IDs, relationships, compact object descriptors and browser-encrypted identity key
+envelopes. Extra fields are rejected, rather than uploading unknown files or secrets. Model identifiers
+inside profiles are metadata; model weights, photos, masks, attachments, plaintext keys and passwords
+are not uploaded. Source records must fit the existing 100,000-byte aggregate cap. Treasury session
+journals and server locks remain on persistent local disk.
+
+The current environment selects Arkiv. Explicit local mode remains available for tests and LAN demos.
+For other integrations, select `TIJORI_STORAGE_MODE=arkiv` only after successful readback and restart
+with the same destination namespace.
+Switching modes alone does not migrate data. Use an SDK version supporting the source state's schema:
+this branch's source is v7 / SDK 0.2.0; the app's checked-in registry lock still selects SDK 0.1.0.
+For branch-local verification, `npm run sdk:try-local` installs this SDK's tarballs without changing
+registry dependencies; `npm ci` restores the published packages. No SDK release is performed here.
+
 ## Two-device demo on Wi-Fi (local storage)
 
 For the two-device demo, set `TIJORI_STORAGE_MODE=local` in your ignored `.env.local`, then run `npm run dev:phone`. No Arkiv credentials are needed in this mode. Vault deployments and payouts still go to Whitechain testnet, so the server needs its Whitechain treasury settings (see "Run it" below). Open the printed HTTPS Wi-Fi URL on both devices (or `https://localhost:3443` on the laptop), on the same trusted network. Handle the local certificate warning yourself.

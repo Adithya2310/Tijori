@@ -42,6 +42,10 @@
   "exclude": [
     "node_modules",
     "contracts",
-    "sdk"
+    "sdk",
+    "data",
+    ".next-object-review",
+    ".next-phone",
+    ".next-phone-build"
   ]
 }

@@ -3,6 +3,7 @@ import { useEffect, type ComponentType, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
 import { TijoriApp, TijoriProvider, useIdentity, type TijoriAppProps } from '@tijori/react';
+import ArkivReceipt from './ArkivReceipt';
 import PhoneAccess from './PhoneAccess';
 import AuthAtmosphere from './AuthAtmosphere';
 
@@ -26,6 +27,6 @@ export function TijoriShell({ children }: { children: ReactNode }) {
 
 export function TijoriScreen({ mode }: { mode?: 'signup' | 'login' }) {
  return <App authMode={mode} authBackdrop={<AuthAtmosphere />} homeHref="/"
-  dashboardExtras={<PhoneAccess />}
+  dashboardExtras={<><ArkivReceipt /><PhoneAccess /></>}
   footer={<><span /><span><ShieldCheck size={15} /> Made for trust, built for together.</span><span><a href="https://www.npmjs.com/org/tijori" target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Built with the Tijori SDK ↗</a></span></>} />;
 }

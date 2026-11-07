@@ -10,8 +10,8 @@ import type { StateStore } from '@tijori/core/state-store';
 
 const context = LEGACY_LOCAL_STORE_CONTEXT;
 // Explicit opt-in storage, independent of Arkiv credentials, journals and namespaces.
-export async function withLocalStore<T>(work: (store: StateStore) => Promise<T>, directory = setting('LOCAL_DEMO_DATA_DIR') || join(process.cwd(), 'data', 'local-demo')): Promise<T> {
- try { await mkdir(directory, { recursive: true, mode: 0o700 }); }
+export async function withLocalStore<T>(work: (store: StateStore) => Promise<T>, directory = setting('LOCAL_DEMO_DATA_DIR') || join(process.cwd(), 'data', 'local-demo'), options: { existingOnly?: boolean } = {}): Promise<T> {
+ try { if (!options.existingOnly) await mkdir(directory, { recursive: true, mode: 0o700 }); }
  catch { throw new StorageError('Cannot open the local demo data directory.'); }
  const lockPath = join(directory, 'state.lock');
  let lock;
@@ -27,6 +27,7 @@ export async function withLocalStore<T>(work: (store: StateStore) => Promise<T>,
   try { key = await readFile(keyPath); }
   catch (e) {
    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+   if (options.existingOnly) throw new StorageError('Existing local encryption key is required for migration; nothing was initialized.');
    // Refuse to replace a lost key if a database already exists.
    try { await readFile(statePath); throw new StorageError('The local encryption key is missing. Restore it; state will not be reset.'); }
    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }

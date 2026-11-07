@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -b packages/core packages/server packages/client packages/react && node scripts/postbuild-packages.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --conditions=@tijori/source --experimental-strip-types --test tests/*.test.ts tests/modem.test.mjs && node --conditions=@tijori/source --experimental-strip-types tests/flow.mjs",
+    "test": "node --conditions=@tijori/source --experimental-strip-types --test tests/*.test.ts tests/modem.test.mjs && node --conditions=@tijori/source --experimental-strip-types tests/flow.mjs && node --conditions=@tijori/source --experimental-strip-types tests/migrate-local-flow.mjs",
     "test:whitechain": "forge build --root ../contracts && node --conditions=@tijori/source --experimental-strip-types tests/whitechain-flow.mjs",
     "arkiv": "node --conditions=@tijori/source --experimental-strip-types packages/server/src/cli.ts arkiv",
     "changeset": "changeset",

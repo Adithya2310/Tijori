@@ -43,3 +43,12 @@ body { font: 400 14px/1.5 'DM Sans', -apple-system, BlinkMacSystemFont, sans-ser
 .tj-phone-link{display:flex;align-items:center;gap:12px}.tj-phone-link button{border:1px solid var(--line);border-radius:999px;background:#fff;color:#285caa;padding:8px;display:grid;place-items:center}
 .tj-phone-qr{flex-shrink:0;text-align:center}.tj-phone-qr svg{display:block;border-radius:12px}.tj-phone-qr small{display:block;font-size:10px;color:var(--muted);margin-top:9px}
 @media(max-width:600px){.tj-phone-access{flex-direction:column;align-items:stretch;padding:18px;gap:16px}.tj-phone-qr{align-self:center}.tj-phone-network{flex-direction:column;align-items:start}}
+
+/* Confirmed Arkiv storage receipt on the signed-in dashboard. */
+.arkiv-receipt{display:flex;align-items:center;gap:16px;padding:22px;margin:24px 0;background:#fff;border:1px solid var(--line);border-radius:22px}
+.arkiv-receipt-icon{display:grid;place-items:center;flex-shrink:0;width:42px;height:42px;border-radius:14px;background:#edf4ff;color:#285caa}
+.arkiv-receipt-body{flex:1;min-width:0}.arkiv-receipt h3{margin:0 0 5px;font-size:16px;font-weight:500;letter-spacing:-.02em}
+.arkiv-receipt p{margin:0;color:var(--muted);font-size:12px;line-height:1.6}.arkiv-receipt small{display:block;margin-top:6px;color:var(--muted);font-size:11px}
+.arkiv-receipt-link{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;padding:10px 14px;border:1px solid var(--line);border-radius:999px;background:#fff;color:#255fc0;font:inherit;font-size:12px;text-decoration:none;cursor:pointer}
+.arkiv-receipt-link:focus-visible{outline:2px solid #255fc0;outline-offset:3px}
+@media(max-width:600px){.arkiv-receipt{flex-wrap:wrap;padding:18px}.arkiv-receipt-body{flex-basis:calc(100% - 58px)}.arkiv-receipt-link{margin-left:58px}}
